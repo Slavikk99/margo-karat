@@ -1,0 +1,653 @@
+# MARGO KARAT — FIX & UPGRADE MASTER PROMPT
+IMPORTANT: The website language must remain Russian. All user-facing texts, buttons, forms, notifications and customer communication must be in Russian.
+## ROLE
+
+You are a senior full-stack developer, UX/UI designer, product architect and QA engineer.
+
+Your mission is NOT to create a new website from zero.
+
+Your mission is to carefully analyze the existing MARGO KARAT project, identify all current problems, fix them, improve the user experience and transform the current prototype into a fully functional premium product.
+
+Work as a professional development team:
+
+* Senior Frontend Engineer
+* Backend Engineer
+* UX/UI Designer
+* Motion Designer
+* Database Architect
+* Payment Integration Specialist
+* QA Tester
+
+---
+
+# STEP 0 — BACKUP BEFORE ANY CHANGES
+
+Before modifying anything:
+
+1. Analyze the current project structure.
+2. Create a complete backup.
+3. Push the current working version to GitHub.
+
+Important:
+
+Do NOT start fixing before creating a safe restore point.
+
+After all improvements are completed:
+
+prepare the project for a final GitHub push.
+
+---
+
+# STEP 1 — PROJECT AUDIT
+
+First inspect:
+
+* current code;
+* components;
+* animations;
+* database;
+* integrations;
+* missing functionality;
+* responsive issues.
+
+Create an internal checklist:
+
+* what is broken;
+* what is incomplete;
+* what needs improvement.
+
+Do not randomly rewrite working parts.
+
+Improve the existing architecture.
+
+---
+
+# ISSUE 1 — LOADING SCREEN
+
+Current problem:
+
+The loading screen is too small and looks unfinished.
+
+There is a loading animation file in the project folder with the letter "M".
+
+Use this existing asset.
+
+Requirements:
+
+* full-screen loading experience;
+* desktop and mobile support;
+* cinematic premium feeling;
+* smooth transition from loading screen into the website.
+
+The loading screen should feel like entering a luxury mystical brand.
+
+---
+
+# ISSUE 2 — HERO VIDEO PROBLEM
+
+Current problem:
+
+The fortune teller video continues playing after scrolling away.
+
+The sound creates a bad user experience.
+
+Fix:
+
+When the user leaves the hero section:
+
+* pause the video automatically;
+* stop unnecessary audio;
+* correctly manage video state.
+
+The hero video should only be active when visible.
+
+Optimize:
+
+* loading speed;
+* mobile performance;
+* autoplay compatibility.
+
+---
+
+# ISSUE 3 — REMOVE HERO BUTTON
+
+Remove:
+
+"Готовы открыть свою историю?"
+
+from the main hero section.
+
+---
+
+# ISSUE 4 — NAVIGATION UPDATE
+
+Change menu names:
+
+"Практики"
+
+→
+
+"Виды гаданий"
+
+"Задать вопрос"
+
+→
+
+"Пакет услуг"
+
+"Консультация"
+
+→
+
+"Приватная консультация"
+
+Remove:
+
+* Login button;
+* Register button.
+
+Create instead:
+
+"Профиль"
+
+When user clicks Profile:
+
+open:
+
+* registration;
+* login;
+* personal account.
+
+---
+
+# ISSUE 5 — REDESIGN ORDER FLOW
+
+The current ordering system feels like a prototype.
+
+Create a simple, premium, user-friendly purchase experience.
+
+The user should understand every step.
+
+---
+
+# ONLINE QUESTION PACKAGES
+
+Packages:
+
+## 1 Question
+
+Price:
+
+3.33 €
+
+---
+
+## 3 Questions
+
+Price:
+
+4.99 €
+
+---
+
+## 5 Questions
+
+Price:
+
+7.99 €
+
+---
+
+# LOGIC
+
+## ONE QUESTION
+
+User clicks:
+
+"1 вопрос"
+
+Open selection window:
+
+Choose one service:
+
+* Tarot
+* Kabbalah
+* Natal chart
+* Coffee reading
+* Palm reading
+* Other
+
+After selection:
+
+Button:
+
+"Перейти к оформлению"
+
+Then show customer form.
+
+---
+
+## THREE QUESTIONS
+
+User must select exactly three services.
+
+Example:
+
+✓ Tarot
+
+✓ Natal chart
+
+✓ Kabbalah
+
+After selecting three:
+
+Enable:
+
+"Перейти к оформлению"
+
+---
+
+## FIVE QUESTIONS
+
+User receives the complete package.
+
+Allow all available directions.
+
+---
+
+# CUSTOMER FORM
+
+Required fields:
+
+* First name
+* Last name
+* Date of birth
+* Phone number
+* Email
+* Personal question
+
+---
+
+# PAYMENT SYSTEM
+
+Currently the website is only a visual prototype.
+
+Implement real payments.
+
+Recommended:
+
+Stripe.
+
+Requirements:
+
+* European bank cards;
+* Visa;
+* Mastercard;
+* Apple Pay / Google Pay if available.
+
+After successful payment:
+
+show confirmation.
+
+Create digital receipt / confirmation screen.
+
+---
+
+# AFTER PAYMENT EXPERIENCE
+
+Create premium animation:
+
+* cards;
+* golden light;
+* particles;
+* mystical atmosphere.
+
+Message:
+
+"Ваш запрос успешно принят. Подготовка персонального ответа началась."
+
+---
+
+# SUPABASE DATABASE
+
+Connect Supabase.
+
+Create database structure:
+
+## Users
+
+Store:
+
+* name;
+* email;
+* profile information.
+
+## Orders
+
+Store:
+
+* user;
+* service;
+* selected reading type;
+* questions;
+* payment status;
+* date;
+* order status.
+
+---
+
+# PERSONAL ACCOUNT
+
+Create user dashboard.
+
+User can:
+
+* register;
+* login;
+* edit profile;
+* see purchases;
+* track order status;
+* view history.
+
+---
+
+# AI WEBSITE ASSISTANT
+
+Current problem:
+
+The assistant is hidden and unclear.
+
+Improve it.
+
+Create:
+
+"Помощник MARGO KARAT"
+
+Requirements:
+
+* visible enough;
+* elegant;
+* not annoying;
+* not like advertising.
+
+Functions:
+
+* explain services;
+* help users choose;
+* answer technical questions;
+* explain ordering.
+
+---
+
+# FREE QUESTION SYSTEM
+
+Create a free question campaign.
+
+Offer:
+
+"Получить один бесплатный вопрос"
+
+Conditions:
+
+User must subscribe to:
+
+* Instagram
+* Facebook
+* TikTok
+
+Add real social links.
+
+---
+
+# TELEGRAM VERIFICATION SYSTEM
+
+Create Telegram bot logic.
+
+Flow:
+
+1. User clicks:
+
+"Перейти в Telegram"
+
+2. Telegram bot starts verification.
+
+3. Bot checks subscription status where technically possible.
+
+Important:
+
+Use official APIs when available.
+
+If Instagram/Facebook/TikTok automatic verification is limited:
+
+create alternative secure verification flow.
+
+---
+
+After successful verification:
+
+Telegram bot generates:
+
+temporary access code.
+
+Example:
+
+MARGO-FREE-XXXX
+
+Requirements:
+
+* unique code;
+* stored in Supabase;
+* valid for 30 minutes;
+* one-time use.
+
+---
+
+User returns to website.
+
+Enters code.
+
+System checks:
+
+* correct code;
+* expiration time;
+* already used or not.
+
+If valid:
+
+unlock free order form.
+
+---
+
+# FREE ORDER FLOW
+
+Same as paid order but without payment.
+
+User selects:
+
+* Tarot;
+* Natal chart;
+* Kabbalah;
+* Coffee reading;
+* Palm reading.
+
+Adds:
+
+* name;
+* surname;
+* date of birth;
+* phone;
+* email;
+* question.
+
+Button:
+
+"Отправить запрос"
+
+After submission:
+
+show:
+
+"Ваш запрос успешно отправлен. Персональный ответ будет подготовлен и отправлен на email."
+
+---
+
+# AI READING AUTOMATION
+
+For paid and free questions:
+
+Create architecture for AI processing.
+
+AI receives:
+
+* client name;
+* date of birth;
+* question;
+* selected service.
+
+The generated answer should be based on:
+
+* symbolic Tarot interpretation;
+* natal chart information.
+
+The response should feel:
+
+* personal;
+* detailed;
+* emotional;
+* human.
+
+Avoid robotic writing.
+
+Before sending:
+
+create admin approval possibility.
+
+Workflow:
+
+AI creates draft.
+
+Admin reviews.
+
+Admin approves.
+
+Email is sent.
+
+---
+
+# PRIVATE CONSULTATION
+
+Rename everywhere:
+
+"Консультация"
+
+to:
+
+"Приватная консультация"
+
+Create separate purchase flow.
+
+After payment save:
+
+* name;
+* phone;
+* email;
+* birthday;
+* message.
+
+Create separate admin section.
+
+Notify MARGO KARAT.
+
+The client is contacted manually through:
+
+* WhatsApp;
+* Telegram;
+* phone.
+
+---
+
+# MOBILE OPTIMIZATION
+
+The website must work perfectly on:
+
+* iPhone;
+* Android;
+* tablets;
+* desktop.
+
+Check:
+
+* animations;
+* menus;
+* forms;
+* payment;
+* profile;
+* videos.
+
+Mobile experience must feel premium, not like a reduced version.
+
+---
+
+# BUG REPORT IMAGES
+
+There will be a folder:
+
+/BUG_REPORTS
+
+Use screenshots from this folder.
+
+Analyze each image.
+
+Fix the problems shown.
+
+---
+
+# FINAL QUALITY CHECK
+
+Before finishing:
+
+Test:
+
+* registration;
+* login;
+* profile;
+* order creation;
+* payment;
+* database saving;
+* Telegram verification;
+* free question;
+* responsive design.
+
+Check for:
+
+* console errors;
+* broken links;
+* slow loading;
+* animation bugs.
+
+---
+
+# FINAL GOAL
+
+Transform MARGO KARAT from a visual prototype into a real working premium platform.
+
+The result should feel like:
+
+* luxury;
+* trust;
+* mystery;
+* modern technology;
+* professional service.
+
+Do not make it look like a cheap mystical website.
+
+Create a premium digital experience.
+
+Инстаграмм: https://www.instagram.com/margo_karat?igsh=MTdvd2s3NDl0NW1pNQ==
+
+Фэйсбук: https://www.facebook.com/share/1F5uHBZUhp/?mibextid=wwXIfr
+
+Тик ток: https://www.tiktok.com/@margo.karat.official.777?_r=1&_t=ZS-97tkhglZ1iH
+
+
+Для создания телеграм агента использовать папку телеграм агент, которую я предоставил при запросе.
