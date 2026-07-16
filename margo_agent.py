@@ -55,6 +55,7 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 BOT_TOKEN = os.getenv("MARGO_BOT_TOKEN", "")
 ADMIN_CHAT = os.getenv("ADMIN_CHAT_ID", "")
+STRIPE_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 DELAY_HOURS = float(os.getenv("DELAY_HOURS", "3.5"))
 POLL_SEC = int(os.getenv("POLL_SEC", "60"))
 
@@ -335,6 +336,33 @@ def notify_admin(text):
 
 
 # ============================================================
+# ПОДТВЕРЖДЕНИЕ ОПЛАТ (опрос Stripe вместо вебхука)
+# ============================================================
+def confirm_payments():
+    """Проверяет незавершённые оплаты по Stripe Checkout Session."""
+    if not STRIPE_KEY:
+        return
+    for table in ("service_orders", "private_consultations"):
+        rows = sb_select(table, {
+            "payment_status": "eq.ожидает оплаты",
+            "stripe_session_id": "not.is.null",
+            "select": "id,stripe_session_id", "limit": "20",
+        })
+        for r in rows:
+            try:
+                resp = requests.get(
+                    f"https://api.stripe.com/v1/checkout/sessions/{r['stripe_session_id']}",
+                    auth=(STRIPE_KEY, ""), timeout=30)
+                if resp.ok and resp.json().get("payment_status") == "paid":
+                    sb_update(table, r["id"], {"payment_status": "оплачен"})
+                    log.info("💳 Оплата подтверждена: %s / %s", table, r["id"])
+                    if table == "private_consultations":
+                        notify_admin("💳 Оплачена приватная консультация! Проверьте админ-панель и свяжитесь с клиентом.")
+            except Exception:
+                log.exception("Ошибка проверки оплаты %s", r.get("id"))
+
+
+# ============================================================
 # ГЛАВНЫЙ ЦИКЛ
 # ============================================================
 def main():
@@ -345,6 +373,7 @@ def main():
     log.info("MARGO KARAT AI Agent запущен. Опрос каждые %d сек.", POLL_SEC)
     while True:
         try:
+            confirm_payments()
             # новые оплаченные + отправленные на перегенерацию
             fresh = sb_select("service_orders", {
                 "payment_status": "eq.оплачен", "status": "eq.Новый заказ",
