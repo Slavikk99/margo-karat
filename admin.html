@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARGO KARAT — Админ-панель</title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--black:#070708;--obsidian:#101014;--obsidian2:#16161c;--gold:#c9a24b;--gold-b:#e8c876;
+--wine:#5a1b2e;--warm:#f3ecdf;--soft:rgba(243,236,223,.72);--line:rgba(201,162,75,.22)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--black);color:var(--warm);font-family:'Manrope',sans-serif;font-weight:300;line-height:1.6}
+h1,h2,h3{font-family:'Cormorant Garamond',serif;font-weight:500}
+header{display:flex;justify-content:space-between;align-items:center;padding:18px 28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(7,7,8,.95);z-index:10}
+header h1{font-size:1.3rem;letter-spacing:.25em;color:var(--gold)}
+main{max-width:1280px;margin:0 auto;padding:28px 20px}
+.tabs{display:flex;gap:10px;margin-bottom:26px;flex-wrap:wrap}
+.tabs button{background:none;border:1px solid var(--line);color:var(--soft);padding:10px 22px;cursor:pointer;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;transition:.3s}
+.tabs button.on{border-color:var(--gold);color:var(--gold-b);background:rgba(201,162,75,.08)}
+.card{border:1px solid var(--line);background:linear-gradient(160deg,var(--obsidian2),var(--obsidian));padding:22px;margin-bottom:16px}
+.row{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:.86rem;color:var(--soft);margin-bottom:10px}
+.row b{color:var(--warm);font-weight:500}
+.badge{display:inline-block;padding:4px 12px;font-size:.7rem;letter-spacing:.12em;border:1px solid var(--line);color:var(--gold-b)}
+.badge.paid{border-color:#4a7d55;color:#a8e0b2}
+.badge.wait{border-color:#8d6a3a;color:#e0c9a8}
+.badge.err{border-color:#8d3a44;color:#eba7ae}
+select,textarea,input,button.act{background:rgba(7,7,8,.7);border:1px solid rgba(243,236,223,.16);color:var(--warm);padding:10px 14px;font-family:'Manrope',sans-serif;font-size:.88rem}
+select:focus,textarea:focus,input:focus{outline:none;border-color:var(--gold)}
+textarea{width:100%;min-height:220px;margin:12px 0;line-height:1.7}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.approve{background:linear-gradient(120deg,rgba(74,125,85,.25),rgba(74,125,85,.4));border-color:#4a7d55!important;cursor:pointer}
+.regen{background:linear-gradient(120deg,rgba(141,106,58,.25),rgba(141,106,58,.4));border-color:#8d6a3a!important;cursor:pointer}
+.save{border-color:var(--gold)!important;color:var(--gold-b);cursor:pointer}
+.muted{color:var(--soft);font-size:.8rem}
+#login{max-width:400px;margin:14vh auto;text-align:center}
+#login input{width:100%;margin-bottom:12px}
+#login button{width:100%;background:var(--gold);color:var(--black);border:none;padding:13px;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;font-weight:600}
+.q{background:rgba(90,27,46,.15);border-left:2px solid var(--wine);padding:10px 14px;margin:10px 0;font-size:.9rem}
+img.upl{max-width:180px;border:1px solid var(--line);margin:6px 6px 0 0;vertical-align:top}
+.empty{text-align:center;color:var(--soft);padding:60px 0}
+.notice{border:1px solid #8d6a3a;background:rgba(141,106,58,.1);padding:14px 18px;margin-bottom:22px;font-size:.85rem;color:#e0c9a8}
+</style>
+</head>
+<body>
+<header>
+  <h1>MARGO KARAT · АДМИН</h1>
+  <button class="act" id="logoutBtn" style="cursor:pointer;display:none">Выйти</button>
+</header>
+
+<main>
+  <!-- ВХОД -->
+  <div id="login">
+    <h2 style="font-size:1.8rem;margin-bottom:8px">Вход для Маргариты</h2>
+    <p class="muted" style="margin-bottom:24px">Доступ только для администратора</p>
+    <input id="adm-email" type="email" placeholder="Email администратора">
+    <input id="adm-pass" type="password" placeholder="Пароль">
+    <button id="adm-login">Войти</button>
+    <p class="muted" id="loginMsg" style="margin-top:14px"></p>
+  </div>
+
+  <!-- ПАНЕЛЬ -->
+  <div id="panel" style="display:none">
+    <div class="notice" id="cfgNotice" style="display:none">
+      ⚠ Supabase не подключён: заполните SUPABASE_URL и SUPABASE_ANON_KEY внизу этого файла.
+    </div>
+    <div class="tabs">
+      <button data-tab="orders" class="on">Заказы</button>
+      <button data-tab="consults">Приватные консультации</button>
+      <button data-tab="users">Пользователи</button>
+      <button data-tab="codes">Коды бота</button>
+    </div>
+    <div id="content"><p class="empty">Загрузка…</p></div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* ================= НАСТРОЙКА =================
+   1) Вставьте ключи Supabase (Settings → API).
+   2) В Supabase → Authentication → Users создайте пользователя-администратора
+      и укажите его email здесь в ADMIN_EMAILS.
+   Только эти email смогут войти в панель. */
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+const ADMIN_EMAILS = ['odessaradio3@gmail.com'];
+
+const STATUSES = ['Новый заказ','В обработке','Ответ создан','Ожидает проверки','Одобрен','Отправлен клиенту','Ошибка'];
+const sb = (SUPABASE_URL && SUPABASE_ANON_KEY) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+let TAB = 'orders';
+
+$('adm-login').onclick = async ()=>{
+  if(!sb){ $('loginMsg').textContent = 'Сначала вставьте ключи Supabase в код этого файла.'; return; }
+  const email = $('adm-email').value.trim(), pass = $('adm-pass').value;
+  if(!ADMIN_EMAILS.includes(email.toLowerCase())){ $('loginMsg').textContent = 'Этот email не является администратором.'; return; }
+  const {error} = await sb.auth.signInWithPassword({email, password:pass});
+  if(error){ $('loginMsg').textContent = 'Ошибка входа: ' + error.message; return; }
+  enter();
+};
+$('logoutBtn').onclick = async ()=>{ if(sb) await sb.auth.signOut(); location.reload(); };
+
+async function boot(){
+  if(!sb){ $('login').style.display='none'; $('panel').style.display='block'; $('cfgNotice').style.display='block'; render([]); return; }
+  const {data:{user}} = await sb.auth.getUser();
+  if(user && ADMIN_EMAILS.includes((user.email||'').toLowerCase())) enter();
+}
+function enter(){
+  $('login').style.display='none'; $('panel').style.display='block';
+  $('logoutBtn').style.display='inline-block';
+  load();
+}
+
+document.querySelectorAll('.tabs button').forEach(b=>{
+  b.onclick = ()=>{ document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); TAB = b.dataset.tab; load(); };
+});
+
+async function load(){
+  if(!sb){ render([]); return; }
+  $('content').innerHTML = '<p class="empty">Загрузка…</p>';
+  const table = {orders:'service_orders', consults:'private_consultations',
+                 users:'profiles', codes:'free_codes'}[TAB];
+  const {data, error} = await sb.from(table).select('*').order('created_at',{ascending:false}).limit(200);
+  if(error){ $('content').innerHTML = `<p class="empty">Ошибка: ${esc(error.message)}</p>`; return; }
+  render(data||[]);
+}
+
+function payBadge(s){ return `<span class="badge ${s==='оплачен'?'paid':s==='ошибка'?'err':'wait'}">${esc(s||'—')}</span>`; }
+
+function render(rows){
+  if(!rows.length){ $('content').innerHTML = '<p class="empty">Пока пусто.</p>'; return; }
+  let html = '';
+  for(const r of rows){
+    if(TAB==='orders'){
+      const dirs = Array.isArray(r.directions) ? r.directions.join(', ') : r.directions;
+      const imgs = (r.uploaded_images||[]).map(p=>{
+        const url = sb ? sb.storage.from('uploads').getPublicUrl(p).data.publicUrl : '#';
+        return `<a href="${url}" target="_blank"><img class="upl" src="${url}" alt="файл"></a>`;
+      }).join('');
+      html += `<div class="card">
+        <div class="row">
+          <span><b>${esc(r.customer_name)} ${esc(r.customer_surname||'')}</b></span>
+          <span>${esc(r.customer_email)}</span><span>${esc(r.customer_phone||'')}</span>
+          <span>ДР: <b>${esc(r.birth_date||'—')}</b></span>
+          <span>${esc(r.package)}${r.is_free ? ' · <b style="color:#e0c9a8">FREE QUESTION</b>' : ''}</span>
+          ${payBadge(r.payment_status)}
+          <span class="muted">${new Date(r.created_at).toLocaleString('ru-RU')}</span>
+        </div>
+        <div class="row"><span>Направления: <b>${esc(dirs)}</b></span>
+          ${r.coffee_mode==='margo_draws' ? '<span class="badge">☕ Маргарита рисует гущу</span>' : ''}</div>
+        <div class="q">${esc(r.question||'—')}</div>
+        ${imgs}
+        <div class="row" style="margin-top:12px">
+          <label>Статус:
+            <select onchange="setStatus('${r.id}', this.value)">
+              ${STATUSES.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </label>
+          <span>Email: ${r.email_sent ? '<span class="badge paid">отправлен</span>' : '<span class="badge wait">не отправлен</span>'}</span>
+        </div>
+        <textarea id="resp-${r.id}" placeholder="Черновик AI появится здесь после генерации…">${esc(r.generated_response||'')}</textarea>
+        <div class="btns">
+          <button class="act approve" onclick="approve('${r.id}')">✓ ОДОБРИТЬ (отправить через 3–4 ч)</button>
+          <button class="act save" onclick="saveDraft('${r.id}')">💾 Сохранить правки</button>
+          <button class="act regen" onclick="regen('${r.id}')">↻ Перегенерировать</button>
+        </div>
+      </div>`;
+    } else if(TAB==='consults'){
+      html += `<div class="card">
+        <div class="row">
+          <span><b>${esc(r.name)} ${esc(r.surname||'')}</b></span>
+          <span>${esc(r.phone)}</span><span>${esc(r.email)}</span>
+          <span>ДР: <b>${esc(r.birth_date||'—')}</b></span>
+          ${payBadge(r.payment_status)}
+          <span class="muted">${new Date(r.created_at).toLocaleString('ru-RU')}</span>
+        </div>
+        <div class="q">${esc(r.message||'—')}</div>
+        <label>Статус:
+          <select onchange="setConsultStatus('${r.id}', this.value)">
+            ${['Новый заказ','Связались','Проведена','Отменена'].map(s=>`<option ${s===r.consultation_status?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </label>
+        <p class="muted" style="margin-top:8px">Связаться вручную: WhatsApp / Telegram / телефон.</p>
+      </div>`;
+    } else if(TAB==='users'){
+      html += `<div class="card"><div class="row">
+        <span><b>${esc(r.name||'—')} ${esc(r.surname||'')}</b></span>
+        <span>${esc(r.email||'')}</span><span>${esc(r.phone||'')}</span>
+        <span>ДР: ${esc(r.birth_date||'—')}</span>
+        <span>${r.free_question_used?'<span class="badge wait">беспл. вопрос использован</span>':''}</span>
+        <span class="muted">${new Date(r.created_at).toLocaleString('ru-RU')}</span>
+      </div></div>`;
+    } else {
+      const alive = !r.used && new Date(r.expires_at) > new Date();
+      html += `<div class="card"><div class="row">
+        <span><b>${esc(r.code)}</b></span>
+        <span>TG: @${esc(r.tg_username||'—')}</span>
+        <span>IG: ${esc(r.ig_nick||'—')}</span>
+        <span class="badge ${r.used?'wait':alive?'paid':'err'}">${r.used?'использован':alive?'активен':'истёк'}</span>
+        <span class="muted">${new Date(r.created_at).toLocaleString('ru-RU')}</span>
+      </div></div>`;
+    }
+  }
+  $('content').innerHTML = html;
+}
+
+async function setStatus(id, s){ if(sb) await sb.from('service_orders').update({status:s}).eq('id',id); }
+async function setConsultStatus(id, s){ if(sb) await sb.from('private_consultations').update({consultation_status:s}).eq('id',id); }
+async function saveDraft(id){
+  if(!sb) return alert('Supabase не подключён.');
+  await sb.from('service_orders').update({generated_response: $('resp-'+id).value}).eq('id',id);
+  alert('Черновик сохранён.');
+}
+async function approve(id){
+  if(!sb) return alert('Supabase не подключён.');
+  await sb.from('service_orders').update({
+    generated_response: $('resp-'+id).value,
+    approval_status:'approved', approved_at:new Date().toISOString(), status:'Одобрен'
+  }).eq('id',id);
+  alert('Одобрено. AI-агент отправит письмо клиенту через 3–4 часа.');
+  load();
+}
+async function regen(id){
+  if(!sb) return alert('Supabase не подключён.');
+  await sb.from('service_orders').update({approval_status:'regenerate', status:'В обработке'}).eq('id',id);
+  alert('Отправлено на перегенерацию — агент создаст новую версию.');
+  load();
+}
+boot();
+</script>
+</body>
+</html>

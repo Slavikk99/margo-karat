@@ -11,6 +11,28 @@
 <meta property="og:image" content="seedream-5.0-lite_b_Роскошный_логотип_бр.jpeg">
 <meta property="og:locale" content="ru_RU">
 <link rel="icon" type="image/jpeg" href="seedream-5.0-lite_b_Роскошный_логотип_бр.jpeg">
+<link rel="canonical" href="https://margokarat.com/">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ProfessionalService",
+  "name": "MARGO KARAT",
+  "description": "Персональные мистические консультации: Таро, натальная карта, каббала, кофейная гуща, хиромантия. Более 20 лет опыта.",
+  "url": "https://margokarat.com/",
+  "priceRange": "€3.33 - €49.99",
+  "sameAs": [
+    "https://www.instagram.com/margo_karat",
+    "https://www.facebook.com/share/1F5uHBZUhp/",
+    "https://www.tiktok.com/@margo.karat.official.777"
+  ],
+  "makesOffer": [
+    {"@type":"Offer","name":"Один вопрос","price":"3.33","priceCurrency":"EUR"},
+    {"@type":"Offer","name":"Три вопроса","price":"4.99","priceCurrency":"EUR"},
+    {"@type":"Offer","name":"5 направлений","price":"7.99","priceCurrency":"EUR"},
+    {"@type":"Offer","name":"Приватная консультация","price":"49.99","priceCurrency":"EUR"}
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -185,6 +207,16 @@ footer{background:var(--obsidian);padding:70px clamp(20px,6vw,80px) 40px}
 .code-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 .code-row input{background:rgba(7,7,8,.6);border:1px solid rgba(243,236,223,.18);color:var(--gold-bright);padding:13px 18px;font-family:var(--sans);font-size:1rem;letter-spacing:.2em;text-align:center;width:min(280px,100%);text-transform:uppercase}
 .code-row input:focus{outline:none;border-color:var(--gold)}
+.phone-row{display:flex;gap:8px}
+.country-sel{background:rgba(7,7,8,.85);border:1px solid rgba(243,236,223,.14);color:var(--white-warm);padding:14px 8px;font-family:var(--sans);font-size:.85rem;max-width:130px}
+.country-sel:focus{outline:none;border-color:var(--gold)}
+.upload-block{border:1px dashed rgba(201,162,75,.35);padding:16px;background:rgba(201,162,75,.04)}
+.upload-block input[type=file]{border:none;background:none;padding:6px 0}
+.radio-line{display:flex;align-items:center;gap:10px;font-size:.86rem;color:var(--text-soft);margin:8px 0;cursor:pointer;text-transform:none;letter-spacing:0}
+.radio-line input{width:auto;accent-color:var(--gold)}
+.pay-banner{position:fixed;top:84px;left:50%;transform:translateX(-50%);z-index:960;padding:16px 32px;font-size:.9rem;letter-spacing:.06em;border:1px solid;max-width:92vw;text-align:center}
+.pay-banner.ok{background:rgba(20,40,24,.97);border-color:#4a7d55;color:#a8e0b2}
+.pay-banner.fail{background:rgba(48,16,20,.97);border-color:#8d3a44;color:#eba7ae}
 
 /* ---------- ASSISTANT ---------- */
 #ai-fab-wrap{position:fixed;bottom:26px;right:26px;z-index:940;display:flex;align-items:center;gap:12px}
@@ -337,11 +369,11 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
         <p class="note">Таро + натальная карта</p>
         <button class="btn-wine">Выбрать</button>
       </div>
-      <div class="plan reveal" data-plan="Пять вопросов" data-price="7.99">
-        <h3>Пять вопросов</h3>
-        <p class="sub">Развёрнутый разбор нескольких сфер жизни.</p>
+      <div class="plan reveal" data-plan="5 направлений" data-price="7.99">
+        <h3>5 направлений</h3>
+        <p class="sub">Полный пакет: Таро, Каббала, Натальная карта, Кофейная гуща, Линии руки.</p>
         <div class="price"><span class="cur">€</span>7.99</div>
-        <p class="note">Таро + натальная карта</p>
+        <p class="note">Все пять направлений сразу</p>
         <button class="btn-wine">Выбрать</button>
       </div>
     </div>
@@ -352,11 +384,11 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
       <p class="chosen" id="svcHint"></p>
       <div class="svc-picker" id="svcPicker">
         <label class="svc-opt"><input type="checkbox" value="Таро"><span>🔮 Таро</span></label>
+        <label class="svc-opt"><input type="checkbox" value="Каббала"><span>✨ Каббала</span></label>
         <label class="svc-opt"><input type="checkbox" value="Натальная карта"><span>🌙 Натальная карта</span></label>
         <label class="svc-opt"><input type="checkbox" value="Кофейная гуща"><span>☕ Кофейная гуща</span></label>
         <label class="svc-opt"><input type="checkbox" value="Линии руки"><span>✋ Линии руки</span></label>
-        <label class="svc-opt"><input type="checkbox" value="Каббала"><span>✨ Каббала</span></label>
-        <label class="svc-opt"><input type="checkbox" value="Другое"><span>🕯️ Другое</span></label>
+        <label class="svc-opt" id="askOpt"><input type="checkbox" value="Задать вопрос"><span>💬 Задать вопрос</span></label>
       </div>
       <button class="btn-gold" id="toFormBtn" disabled style="width:100%;opacity:.4">Перейти к оформлению</button>
     </div>
@@ -372,9 +404,30 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
         </div>
         <div class="f-row">
           <div class="field"><label for="of-dob">Дата рождения</label><input id="of-dob" type="date" required></div>
-          <div class="field"><label for="of-phone">Телефон</label><input id="of-phone" type="tel" required autocomplete="tel"></div>
+          <div class="field"><label for="of-phone">Телефон</label>
+            <div class="phone-row">
+              <select class="country-sel" id="of-cc" aria-label="Код страны"></select>
+              <input id="of-phone" type="tel" required autocomplete="tel" placeholder="97 123 45 67" pattern="[0-9\s\-]{5,15}">
+            </div>
+          </div>
         </div>
         <div class="field"><label for="of-email">Email</label><input id="of-email" type="email" required autocomplete="email"></div>
+
+        <!-- Загрузка фото ладони (появляется при выборе «Линии руки») -->
+        <div class="field upload-block" id="palmUpload" style="display:none">
+          <label for="of-palm">✋ Фотография ладони</label>
+          <input id="of-palm" type="file" accept="image/*">
+          <p class="form-note" style="margin:8px 0 0">Сфотографируйте ладонь при хорошем освещении — линии должны быть видны.</p>
+        </div>
+
+        <!-- Кофейная гуща: два варианта (появляется при выборе «Кофейная гуща») -->
+        <div class="field upload-block" id="coffeeBlock" style="display:none">
+          <label>☕ Кофейная гуща</label>
+          <label class="radio-line"><input type="radio" name="coffeeMode" value="upload" checked> Загрузить фотографию кофейной гущи</label>
+          <label class="radio-line"><input type="radio" name="coffeeMode" value="margo_draws"> Маргарита создаст символический рисунок самостоятельно</label>
+          <input id="of-coffee" type="file" accept="image/*" style="margin-top:10px">
+        </div>
+
         <div class="field"><label for="of-q">Ваш вопрос</label><textarea id="of-q" required placeholder="Опишите, что вас волнует…"></textarea></div>
         <p class="form-note">После оплаты данные сохраняются, и Маргарита лично подтверждает каждый персональный разбор перед отправкой.</p>
         <button type="submit" class="btn-gold" style="width:100%">Перейти к оплате</button>
@@ -402,8 +455,14 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
           <div class="field"><label for="cf-dob">Дата рождения</label><input id="cf-dob" type="date" required></div>
         </div>
         <div class="f-row">
-          <div class="field"><label for="cf-phone">Телефон</label><input id="cf-phone" type="tel" required></div>
+          <div class="field"><label for="cf-surname">Фамилия</label><input id="cf-surname" required></div>
           <div class="field"><label for="cf-email">Email</label><input id="cf-email" type="email" required></div>
+        </div>
+        <div class="field"><label for="cf-phone">Телефон</label>
+          <div class="phone-row">
+            <select class="country-sel" id="cf-cc" aria-label="Код страны"></select>
+            <input id="cf-phone" type="tel" required pattern="[0-9\s\-]{5,15}" placeholder="97 123 45 67">
+          </div>
         </div>
         <div class="field"><label for="cf-comment">Комментарий</label><textarea id="cf-comment" placeholder="Коротко о вашем запросе (по желанию)"></textarea></div>
         <button type="submit" class="btn-gold">Записаться — 49.99 €</button>
@@ -436,7 +495,7 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
     <div class="code-entry">
       <p style="color:var(--text-soft);font-size:.85rem;margin-bottom:12px">Уже получили код от бота? Введите его:</p>
       <div class="code-row">
-        <input id="freeCode" placeholder="MARGO-FREE-XXXX" maxlength="15" autocomplete="off">
+        <input id="freeCode" placeholder="margo-free-xxxxxxxx-xxxx" maxlength="24" autocomplete="off">
         <button class="btn-wine" id="checkCodeBtn">Проверить код</button>
       </div>
       <p id="codeMsg" style="font-size:.8rem;margin-top:10px;min-height:1.2em"></p>
@@ -450,7 +509,12 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
       </div>
       <div class="f-row">
         <div class="field"><label for="ff-dob">Дата рождения</label><input id="ff-dob" type="date" required></div>
-        <div class="field"><label for="ff-phone">Телефон</label><input id="ff-phone" type="tel" required></div>
+        <div class="field"><label for="ff-phone">Телефон</label>
+          <div class="phone-row">
+            <select class="country-sel" id="ff-cc" aria-label="Код страны"></select>
+            <input id="ff-phone" type="tel" required pattern="[0-9\s\-]{5,15}" placeholder="97 123 45 67">
+          </div>
+        </div>
       </div>
       <div class="f-row">
         <div class="field"><label for="ff-email">Email</label><input id="ff-email" type="email" required></div>
@@ -554,6 +618,26 @@ html{scrollbar-color:var(--bordeaux-2) var(--black)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+/* =====================================================
+   КОНФИГУРАЦИЯ ПРОДАКШЕНА
+   Заполнить после создания проектов Supabase и Stripe:
+   1. SUPABASE_URL и SUPABASE_ANON_KEY — Supabase → Settings → API
+   2. STRIPE_CHECKOUT_URL — URL Edge Function создания Checkout Session
+   3. TELEGRAM_BOT — ссылка на бота после создания у BotFather
+   Пока поля пустые — сайт работает в демо-режиме (без реальной оплаты).
+===================================================== */
+window.MARGO_CONFIG = {
+  SUPABASE_URL: '',
+  SUPABASE_ANON_KEY: '',
+  STRIPE_CHECKOUT_URL: '',
+  TELEGRAM_BOT: 'https://t.me/'
+};
+window.sb = (MARGO_CONFIG.SUPABASE_URL && MARGO_CONFIG.SUPABASE_ANON_KEY)
+  ? supabase.createClient(MARGO_CONFIG.SUPABASE_URL, MARGO_CONFIG.SUPABASE_ANON_KEY)
+  : null;
+</script>
 <script>
 /* =====================================================
    MARGO KARAT — интерактив
@@ -582,6 +666,7 @@ window.addEventListener('load', ()=> setTimeout(hideLoader, 3800));
 /* ---------- NAV ---------- */
 const nav = document.getElementById('nav');
 addEventListener('scroll', ()=> nav.classList.toggle('scrolled', scrollY > 60), {passive:true});
+document.getElementById('tgBotLink').href = MARGO_CONFIG.TELEGRAM_BOT;
 
 /* ---------- HERO VIDEO STATE MANAGEMENT ----------
    Видео активно ТОЛЬКО когда hero-секция видна:
@@ -617,10 +702,35 @@ document.querySelectorAll('.story-img img').forEach(img=>{
 gsap.to('#heroVideo', {y:120, ease:'none',
   scrollTrigger:{trigger:'#hero', scrub:1, start:'top top', end:'bottom top'}});
 
+/* ---------- КОДЫ СТРАН (междунар. телефон) ---------- */
+const COUNTRIES = [
+  ['🇺🇦 Украина','+380'],['🇩🇪 Германия','+49'],['🇵🇱 Польша','+48'],['🇫🇷 Франция','+33'],
+  ['🇪🇸 Испания','+34'],['🇮🇹 Италия','+39'],['🇨🇿 Чехия','+420'],['🇳🇱 Нидерланды','+31'],
+  ['🇧🇪 Бельгия','+32'],['🇦🇹 Австрия','+43'],['🇨🇭 Швейцария','+41'],['🇵🇹 Португалия','+351'],
+  ['🇬🇧 Великобритания','+44'],['🇮🇪 Ирландия','+353'],['🇸🇪 Швеция','+46'],['🇳🇴 Норвегия','+47'],
+  ['🇩🇰 Дания','+45'],['🇫🇮 Финляндия','+358'],['🇬🇷 Греция','+30'],['🇷🇴 Румыния','+40'],
+  ['🇧🇬 Болгария','+359'],['🇭🇺 Венгрия','+36'],['🇸🇰 Словакия','+421'],['🇱🇹 Литва','+370'],
+  ['🇱🇻 Латвия','+371'],['🇪🇪 Эстония','+372'],['🇲🇩 Молдова','+373'],['🇮🇱 Израиль','+972'],
+  ['🇺🇸 США / Канада','+1'],['🇹🇷 Турция','+90'],['🇬🇪 Грузия','+995'],['🇦🇲 Армения','+374'],
+  ['🇰🇿 Казахстан','+7'],['🇺🇿 Узбекистан','+998'],['🌍 Другая страна','+']
+];
+document.querySelectorAll('.country-sel').forEach(sel=>{
+  sel.innerHTML = COUNTRIES.map(([n,c])=>
+    `<option value="${c}" ${c==='+380'?'selected':''}>${n} ${c}</option>`).join('');
+});
+function fullPhone(ccId, phoneId){
+  return document.getElementById(ccId).value + ' ' +
+         document.getElementById(phoneId).value.trim();
+}
+
 /* ---------- ПОШАГОВЫЙ ФЛОУ ЗАКАЗА ----------
-   Шаг 1: пакет → Шаг 2: направления (1 / ровно 3 / все 5) → Шаг 3: форма */
+   Шаг 1: пакет → Шаг 2: направления → Шаг 3: форма
+   «1 вопрос»: ровно одно из 6 (вкл. «Задать вопрос»)
+   «3 вопроса»: ровно три из 5 основных
+   «5 направлений»: все 5 основных автоматически */
 let currentPlan = {name:'Один вопрос', price:'3.33', limit:1};
-const LIMITS = {'Один вопрос':1, 'Три вопроса':3, 'Пять вопросов':6};
+const LIMITS = {'Один вопрос':1, 'Три вопроса':3, '5 направлений':5};
+const MAIN_FIVE = ['Таро','Каббала','Натальная карта','Кофейная гуща','Линии руки'];
 const svcPanel  = document.getElementById('servicePanel');
 const orderPanel= document.getElementById('orderPanel');
 const picker    = document.getElementById('svcPicker');
@@ -632,24 +742,23 @@ function setStep(n){
     s.classList.toggle('on', +s.dataset.step <= n));
 }
 function updatePickerState(){
+  const isFull = currentPlan.limit === 5;
   const checked = boxes.filter(b=>b.checked);
   const lim = currentPlan.limit;
-  const need = lim===1 ? 1 : (lim===3 ? 3 : Math.max(1,checked.length));
-  // блокируем лишние чекбоксы при достижении лимита
   boxes.forEach(b=>{
-    const lock = !b.checked && checked.length >= lim;
+    const lock = isFull || (!b.checked && checked.length >= lim);
     b.disabled = lock;
-    b.closest('.svc-opt').classList.toggle('locked', lock);
+    b.closest('.svc-opt').classList.toggle('locked', lock && !b.checked);
   });
   const ok = lim===1 ? checked.length===1
            : lim===3 ? checked.length===3
-           : checked.length>=1;
+           : checked.length===5;
   toFormBtn.disabled = !ok;
   toFormBtn.style.opacity = ok ? 1 : .4;
   document.getElementById('svcHint').textContent =
     lim===1 ? 'Выберите одно направление'
     : lim===3 ? `Выберите ровно три направления (выбрано: ${checked.length})`
-    : `Полный пакет — любые направления (выбрано: ${checked.length})`;
+    : 'Полный пакет — все пять направлений включены';
 }
 document.querySelectorAll('.plan').forEach(card=>{
   card.addEventListener('click', ()=>{
@@ -657,9 +766,17 @@ document.querySelectorAll('.plan').forEach(card=>{
     card.classList.add('selected');
     currentPlan = {name:card.dataset.plan, price:card.dataset.price,
                    limit: LIMITS[card.dataset.plan] || 1};
-    boxes.forEach(b=>{b.checked=false; b.disabled=false;
-      b.closest('.svc-opt').classList.remove('locked');});
+    const isFull = currentPlan.limit === 5;
+    // «Задать вопрос» доступен только в пакете «Один вопрос»
+    document.getElementById('askOpt').style.display =
+      currentPlan.limit === 1 ? '' : 'none';
+    boxes.forEach(b=>{
+      b.disabled=false;
+      b.closest('.svc-opt').classList.remove('locked');
+      b.checked = isFull && MAIN_FIVE.includes(b.value); // полный пакет: все 5 сразу
+    });
     document.getElementById('svcTitle').textContent =
+      isFull ? 'Ваш полный пакет' :
       currentPlan.limit===1 ? 'Выберите направление' : 'Выберите направления';
     orderPanel.style.display='none';
     svcPanel.style.display='block';
@@ -672,9 +789,21 @@ toFormBtn.addEventListener('click', ()=>{
   const chosen = boxes.filter(b=>b.checked).map(b=>b.value);
   document.getElementById('chosenPlan').textContent = `${currentPlan.name} — ${currentPlan.price} €`;
   document.getElementById('chosenSvcs').textContent = 'Направления: ' + chosen.join(', ');
+  // условные поля: фото ладони и кофейная гуща
+  document.getElementById('palmUpload').style.display =
+    chosen.includes('Линии руки') ? '' : 'none';
+  document.getElementById('coffeeBlock').style.display =
+    chosen.includes('Кофейная гуща') ? '' : 'none';
   orderPanel.style.display='block';
   setStep(3);
   orderPanel.scrollIntoView({behavior:'smooth', block:'center'});
+});
+// показать/скрыть input файла гущи в зависимости от режима
+document.querySelectorAll('input[name=coffeeMode]').forEach(r=>{
+  r.addEventListener('change', ()=>{
+    document.getElementById('of-coffee').style.display =
+      document.querySelector('input[name=coffeeMode]:checked').value==='upload' ? '' : 'none';
+  });
 });
 
 /* ---------- МОДАЛЬНЫЕ ОКНА ---------- */
@@ -703,47 +832,199 @@ function spawnParticles(){
   }
 }
 
-/* ---------- ФОРМЫ ----------
-   TODO backend:
-   1) POST данных в Supabase (таблица Orders)
-   2) redirect на Stripe Checkout (Visa / MC / Apple Pay / Google Pay, опц. PayPal)
-   3) webhook → статус оплаты → AI-черновик → админ-панель Маргариты → email клиенту */
-function submitOrder(e, extra){
-  e.preventDefault();
-  openModal('afterModal');
-  e.target.reset();
+/* ---------- РЕЗУЛЬТАТ ОПЛАТЫ (возврат со Stripe) ---------- */
+(function(){
+  const p = new URLSearchParams(location.search).get('payment');
+  if(!p) return;
+  const div = document.createElement('div');
+  div.className = 'pay-banner ' + (p==='success' ? 'ok' : 'fail');
+  div.textContent = p==='success'
+    ? 'Оплата прошла успешно.'
+    : 'Операция не была завершена. Проверьте данные карты или баланс.';
+  document.body.appendChild(div);
+  if(p==='success') setTimeout(()=>openModal('afterModal'), 600);
+  setTimeout(()=>div.remove(), 9000);
+  history.replaceState({}, '', location.pathname);
+})();
+
+/* ---------- ЗАГРУЗКА ФАЙЛОВ В SUPABASE STORAGE ---------- */
+async function uploadFile(input, prefix){
+  if(!sb || !input || !input.files || !input.files[0]) return null;
+  const f = input.files[0];
+  if(f.size > 8*1024*1024){ alert('Файл больше 8 МБ — выберите фото поменьше.'); throw new Error('file too big'); }
+  const path = `${prefix}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${(f.name.split('.').pop()||'jpg').toLowerCase()}`;
+  const {error} = await sb.storage.from('uploads').upload(path, f);
+  if(error) throw error;
+  return path;
 }
-document.getElementById('orderForm').addEventListener('submit', e=>submitOrder(e, currentPlan));
-document.getElementById('consultForm').addEventListener('submit', e=>submitOrder(e, {name:'Приватная консультация', price:'49.99'}));
+
+/* ---------- ОФОРМЛЕНИЕ ЗАКАЗА ----------
+   Продакшен: заказ → Supabase → Stripe Checkout (Visa/MC/Apple Pay/Google Pay)
+   Демо (пока ключи не заполнены): красивое подтверждение без оплаты. */
+const esc = s => String(s||'').slice(0,2000);
+
+async function createOrderAndPay(orderData, priceEUR, kind){
+  if(sb){
+    try{
+      const {data:{user}} = await sb.auth.getUser();
+      orderData.user_id = user ? user.id : null;
+      const table = kind==='consult' ? 'private_consultations' : 'service_orders';
+      const {data, error} = await sb.from(table).insert(orderData).select('id').single();
+      if(error) throw error;
+      if(MARGO_CONFIG.STRIPE_CHECKOUT_URL && priceEUR > 0){
+        const r = await fetch(MARGO_CONFIG.STRIPE_CHECKOUT_URL, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({order_id:data.id, kind, amount:priceEUR,
+            success_url: location.origin+location.pathname+'?payment=success',
+            cancel_url:  location.origin+location.pathname+'?payment=fail'})
+        });
+        const {url} = await r.json();
+        if(url){ location.href = url; return; }   // редирект на Stripe
+      }
+      openModal('afterModal');                     // бесплатный заказ или Stripe ещё не подключён
+      return;
+    }catch(err){
+      console.error(err);
+      alert('Не удалось сохранить заказ. Попробуйте ещё раз или напишите нам в Telegram.');
+      return;
+    }
+  }
+  openModal('afterModal');                         // демо-режим
+}
+
+document.getElementById('orderForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const chosen = boxes.filter(b=>b.checked).map(b=>b.value);
+  const coffeeMode = chosen.includes('Кофейная гуща')
+    ? document.querySelector('input[name=coffeeMode]:checked').value : null;
+  const images = [];
+  try{
+    const palm = await uploadFile(document.getElementById('of-palm'), 'palm');
+    if(palm) images.push(palm);
+    if(coffeeMode==='upload'){
+      const cof = await uploadFile(document.getElementById('of-coffee'), 'coffee');
+      if(cof) images.push(cof);
+    }
+  }catch(_){ return; }
+  await createOrderAndPay({
+    customer_name: esc(document.getElementById('of-name').value),
+    customer_surname: esc(document.getElementById('of-surname').value),
+    customer_email: esc(document.getElementById('of-email').value),
+    customer_phone: fullPhone('of-cc','of-phone'),
+    birth_date: document.getElementById('of-dob').value || null,
+    package: currentPlan.name,
+    price: +currentPlan.price,
+    directions: chosen,
+    question: esc(document.getElementById('of-q').value),
+    uploaded_images: images,
+    coffee_mode: coffeeMode
+  }, +currentPlan.price, 'order');
+  e.target.reset();
+});
+
+document.getElementById('consultForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  await createOrderAndPay({
+    name: esc(document.getElementById('cf-name').value),
+    surname: esc(document.getElementById('cf-surname').value),
+    phone: fullPhone('cf-cc','cf-phone'),
+    email: esc(document.getElementById('cf-email').value),
+    birth_date: document.getElementById('cf-dob').value || null,
+    message: esc(document.getElementById('cf-comment').value),
+    price: 49.99
+  }, 49.99, 'consult');
+  e.target.reset();
+});
+
+/* ---------- ПРОФИЛЬ (Supabase Auth) ---------- */
 document.getElementById('accountBtn').addEventListener('click', ()=>openModal('accountModal'));
 document.getElementById('profileLink').addEventListener('click', e=>{e.preventDefault(); openModal('accountModal');});
-document.getElementById('loginBtn').addEventListener('click', ()=>alert('Вход заработает после подключения Supabase Auth.'));
-document.getElementById('regBtn').addEventListener('click', ()=>alert('Регистрация заработает после подключения Supabase Auth.'));
+
+async function authAction(mode){
+  const email = document.getElementById('pr-email').value.trim();
+  const pass  = document.getElementById('pr-pass').value;
+  if(!sb){ alert('Аккаунты заработают после подключения Supabase — ключи вставляются в MARGO_CONFIG вверху файла.'); return; }
+  if(!email || pass.length < 6){ alert('Введите email и пароль от 6 символов.'); return; }
+  const {error} = mode==='login'
+    ? await sb.auth.signInWithPassword({email, password:pass})
+    : await sb.auth.signUp({email, password:pass});
+  if(error){ alert('Ошибка: ' + error.message); return; }
+  alert(mode==='login' ? 'Вы вошли в профиль.' :
+    'Регистрация успешна! Проверьте почту и подтвердите адрес.');
+  closeModal('accountModal');
+}
+document.getElementById('loginBtn').addEventListener('click', ()=>authAction('login'));
+document.getElementById('regBtn').addEventListener('click', ()=>authAction('register'));
 
 /* ---------- БЕСПЛАТНЫЙ ВОПРОС: ПРОВЕРКА КОДА ----------
-   TODO backend: заменить на запрос к Supabase (таблица free_codes):
-   код существует + не использован + не старше 30 минут → unlock. */
+   С Supabase: код должен существовать, быть неиспользованным и не истёкшим.
+   Вручную придуманные коды не работают. */
 const codeMsg = document.getElementById('codeMsg');
-document.getElementById('checkCodeBtn').addEventListener('click', ()=>{
-  const raw = document.getElementById('freeCode').value.trim().toUpperCase();
-  if(/^MARGO-FREE-[A-Z0-9]{4}$/.test(raw)){
-    codeMsg.textContent = '✓ Код принят. Форма открыта — задайте свой вопрос.';
-    codeMsg.style.color = 'var(--gold-bright)';
-    const ff = document.getElementById('freeForm');
-    ff.style.display = 'block';
-    ff.scrollIntoView({behavior:'smooth', block:'center'});
-  }else{
-    codeMsg.textContent = 'Код не подошёл. Формат: MARGO-FREE-XXXX — его выдаёт Telegram-бот после проверки подписок.';
-    codeMsg.style.color = '#c96b6b';
+let validatedCode = null;
+
+document.getElementById('checkCodeBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('freeCode').value.trim().toLowerCase();
+  const fail = msg => { codeMsg.textContent = msg; codeMsg.style.color = '#c96b6b'; };
+
+  if(!/^margo-free-[a-z0-9]{8}-[a-z0-9]{4}$/.test(raw)){
+    fail('Ваш код недействителен или срок его действия истёк.');
+    return;
   }
+  if(sb){
+    const {data, error} = await sb.from('free_codes')
+      .select('code, used, expires_at').eq('code', raw).maybeSingle();
+    if(error || !data || data.used || new Date(data.expires_at) < new Date()){
+      fail('Ваш код недействителен или срок его действия истёк.');
+      return;
+    }
+    const {data:{user}} = await sb.auth.getUser();
+    if(!user){
+      fail('Сначала зарегистрируйтесь или войдите в Профиль — бесплатный вопрос привязывается к аккаунту.');
+      openModal('accountModal');
+      return;
+    }
+    const {data:prof} = await sb.from('profiles')
+      .select('free_question_used').eq('id', user.id).maybeSingle();
+    if(prof && prof.free_question_used){
+      fail('Бесплатный вопрос уже был использован на этом аккаунте.');
+      return;
+    }
+  }
+  validatedCode = raw;
+  codeMsg.textContent = '✓ Код принят. Форма открыта — задайте свой вопрос.';
+  codeMsg.style.color = 'var(--gold-bright)';
+  const ff = document.getElementById('freeForm');
+  ff.style.display = 'block';
+  ff.scrollIntoView({behavior:'smooth', block:'center'});
 });
-document.getElementById('freeForm').addEventListener('submit', e=>{
+
+document.getElementById('freeForm').addEventListener('submit', async e=>{
   e.preventDefault();
+  if(sb && validatedCode){
+    try{
+      const {data:{user}} = await sb.auth.getUser();
+      await sb.from('service_orders').insert({
+        user_id: user ? user.id : null,
+        customer_name: esc(document.getElementById('ff-name').value),
+        customer_surname: esc(document.getElementById('ff-surname').value),
+        customer_email: esc(document.getElementById('ff-email').value),
+        customer_phone: fullPhone('ff-cc','ff-phone'),
+        birth_date: document.getElementById('ff-dob').value || null,
+        package: 'FREE QUESTION', price: 0, is_free: true,
+        payment_status: 'оплачен',
+        directions: [document.getElementById('ff-practice').value],
+        question: esc(document.getElementById('ff-q').value)
+      });
+      await sb.from('free_codes').update({used:true, used_by:user?user.id:null})
+        .eq('code', validatedCode);
+      if(user) await sb.from('profiles').update({free_question_used:true}).eq('id', user.id);
+    }catch(err){ console.error(err); }
+  }
   openModal('afterModal');
   e.target.reset();
   document.getElementById('freeForm').style.display='none';
   document.getElementById('freeCode').value='';
-  codeMsg.textContent='';
+  codeMsg.textContent=''; validatedCode = null;
 });
 
 /* ---------- AI SUPPORT ASSISTANT ---------- */
