@@ -143,8 +143,9 @@ def _order_caption(o):
         f"Пакет: {o.get('package','')}\n"
         f"Направления: {dirs}\n"
         f"Рука (хиромантия): {o.get('hand_side','—')}\n"
-        f"Дата рождения: {o.get('birth_date','—')}\n"
-        f"Город/время: {o.get('birth_city','—')} / {o.get('birth_time','—')}\n"
+        f"Дата рождения: {o.get('birth_date') or '—'}\n"
+        f"Город: {o.get('birth_city') or '—'}, страна: {o.get('birth_country') or '—'}\n"
+        f"Время рождения: {o.get('birth_time') or '—'}\n"
         f"Вопрос: {o.get('question','—')}\n"
         f"Статус: {db.STATUS_RU.get(o.get('status'), o.get('status'))}")
 

@@ -70,7 +70,7 @@ def create_order(data):
         return insert("oracle_orders", data)
     except Exception as e:
         log.warning("create_order retry без доп.полей: %s", e)
-        safe = {k: v for k, v in data.items() if k not in ("add_consult", "amount")}
+        safe = {k: v for k, v in data.items() if k not in ("add_consult", "amount", "birth_country")}
         return insert("oracle_orders", safe)
 
 

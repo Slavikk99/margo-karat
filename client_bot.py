@@ -16,7 +16,7 @@ except ImportError:
     CopyTextButton = None
 
 from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
-                          MessageHandler, ContextTypes, filters)
+                          MessageHandler, ContextTypes, filters, PicklePersistence)
 
 import db
 from config import PAYMENT_DETAILS, PRICES
@@ -192,6 +192,15 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await _on_consult_choice(q, ctx, data.split("|", 1)[1])
     if data.startswith("hand|"):
         return await _on_hand(q, ctx, data.split("|", 1)[1])
+    if data.startswith("skip|"):
+        key = data.split("|", 1)[1]
+        if "_fields" not in ctx.user_data:
+            return
+        try:
+            await q.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return await _advance(q.message, ctx, "не знаю" if key == "birth_time" else "")
     if data == "cancel_new":
         ctx.user_data.clear()
         return await q.message.reply_text("Оформление отменено.", reply_markup=MENU_KB)
@@ -313,8 +322,40 @@ BASE_FIELDS = [
 ]
 NATAL_FIELDS = [
     ("birth_city", "Город рождения?"),
-    ("birth_time", "Время рождения? (например, 14:30, или «не знаю»)"),
+    ("birth_country", "Страна рождения?"),
+    ("birth_time", "Точное время рождения? (например, 14:30)"),
 ]
+QUESTION_FIELD = ("question", "Дополните свой вопрос или задайте свой вопрос.")
+
+
+def _field_kb(key):
+    rows = []
+    if key == "birth_time":
+        rows.append([InlineKeyboardButton("Не знаю время рождения", callback_data="skip|birth_time")])
+    if key == "question":
+        rows.append([InlineKeyboardButton("➡️ Продолжить без вопроса", callback_data="skip|question")])
+    rows.append([InlineKeyboardButton("❌ Отменить", callback_data="cancel_new")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _ask_field(message, ctx):
+    step = ctx.user_data[STEP]
+    fields = ctx.user_data["_fields"]
+    key, prompt = fields[step]
+    await message.reply_text(f"Шаг {step+1} из {len(fields)}:\n\n{prompt}", reply_markup=_field_kb(key))
+
+
+async def _advance(message, ctx, value):
+    step = ctx.user_data.get(STEP, 0)
+    fields = ctx.user_data["_fields"]
+    ctx.user_data[D][fields[step][0]] = value
+    step += 1
+    ctx.user_data[STEP] = step
+    if step < len(fields):
+        await _ask_field(message, ctx)
+    else:
+        ctx.user_data.pop("_fields", None)
+        await _after_data(message, ctx)
 
 
 async def _start_collect(message, ctx):
@@ -322,11 +363,10 @@ async def _start_collect(message, ctx):
     fields = BASE_FIELDS[:]
     if "Натальная карта" in ctx.user_data[D]["directions"]:
         fields += NATAL_FIELDS
-    fields += [("question", "Что вас сейчас волнует больше всего? Опишите ваш вопрос.")]
+    fields += [QUESTION_FIELD]
     ctx.user_data["_fields"] = fields
-    await message.reply_text(
-        "Заполним анкету по шагам. В любой момент можно нажать «Отменить».\n\n" + fields[0][1],
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отменить", callback_data="cancel_new")]]))
+    await message.reply_text("Заполним короткую анкету по шагам. В любой момент можно нажать «Отменить».")
+    await _ask_field(message, ctx)
 
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -359,18 +399,8 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if D not in ctx.user_data or "_fields" not in ctx.user_data:
         return await cmd_start(update, ctx)
 
-    step = ctx.user_data.get(STEP, 0)
-    fields = ctx.user_data["_fields"]
-    ctx.user_data[D][fields[step][0]] = text.strip()
-    step += 1
-    ctx.user_data[STEP] = step
-    if step < len(fields):
-        await update.message.reply_text(
-            f"✅ Принято. Шаг {step+1} из {len(fields)}:\n\n{fields[step][1]}",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Отменить", callback_data="cancel_new")]]))
-    else:
-        ctx.user_data.pop("_fields", None)
-        await _after_data(update.message, ctx)
+    await update.message.reply_text("✅ Принято.")
+    await _advance(update.message, ctx, text.strip())
 
 
 # ---------------- фото ----------------
@@ -381,9 +411,12 @@ async def _after_data(message, ctx):
             [InlineKeyboardButton("🤚 Левая рука", callback_data="hand|Левая")],
             [InlineKeyboardButton("✋ Правая рука", callback_data="hand|Правая")]])
         await message.reply_text(
-            "В хиромантии руки означают разное:\n\n"
-            "• *Пассивная* — врождённые качества и потенциал.\n"
-            "• *Активная* — как потенциал реализуется сейчас.\n\nКакую руку сфотографируем?",
+            "В хиромантии каждая рука имеет своё значение:\n\n"
+            "✋ *Активная рука* — обычно правая у правшей и левая у левшей. "
+            "Показывает текущий жизненный путь, изменения и то, как человек реализует свой потенциал.\n\n"
+            "✋ *Пассивная рука* — обычно левая у правшей и правая у левшей. "
+            "Показывает врождённые качества, характер и заложенный потенциал.\n\n"
+            "Какую руку сфотографируем?",
             reply_markup=kb, parse_mode="Markdown")
         return
     if "Линии руки" in d["directions"] and not _has_photo(d, "palm"):
@@ -494,7 +527,8 @@ async def _on_paid(q, ctx):
                 "telegram_id": u.id, "username": u.username or "", "first_name": u.first_name or "",
                 "customer_name": d.get("customer_name"), "customer_surname": d.get("customer_surname"),
                 "phone": d.get("phone"), "birth_date": d.get("birth_date"),
-                "birth_city": d.get("birth_city"), "birth_time": d.get("birth_time"),
+                "birth_city": d.get("birth_city"), "birth_country": d.get("birth_country"),
+                "birth_time": d.get("birth_time"),
                 "package": d["package"], "directions": d["directions"],
                 "hand_side": d.get("hand_side"), "question": d.get("question"),
                 "photos": d["photos"], "add_consult": d.get("add_consult", False),
@@ -567,7 +601,9 @@ async def setup_commands(app):
 
 def build_client_app() -> Application:
     from config import CLIENT_BOT_TOKEN
-    app = Application.builder().token(CLIENT_BOT_TOKEN).post_init(setup_commands).build()
+    persistence = PicklePersistence(filepath="client_state.pickle")
+    app = (Application.builder().token(CLIENT_BOT_TOKEN)
+           .persistence(persistence).post_init(setup_commands).build())
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("history", cmd_history))
