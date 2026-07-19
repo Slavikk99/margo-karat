@@ -61,20 +61,21 @@ def _generate_direction(order, direction, image_note=""):
         f"Направление разбора: {direction}\n"
         f"Вопрос клиента: {order.get('question','') or '—'}\n"
     )
+    if direction == "Линии руки":
+        hs = order.get("hand_side")
+        ctx += f"Прислана рука: {hs or 'не указана'}\n"
     if image_note:
         ctx += f"\nОПИСАНИЕ ЗАГРУЖЕННОГО ФОТО:\n{image_note}\n"
     if direction in ("Таро", "Задать вопрос"):
-        ctx += f"\nВыпавшие карты (используй три из них, назови их): {cards}\n"
-    if direction == "Кофейная гуща" and not image_note:
-        mode = order.get("coffee_mode")
-        ctx += ("\nФото нет: Маргарита сама приготовила символическую чашку для клиента.\n"
-                if mode == "margo_draws" else "\nФото гущи нет — создай символический образ чашки.\n")
+        ctx += f"\nВыпавшие карты (кратко назови три и сразу переходи к анализу): {cards}\n"
 
     resp = _groq.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": f"{STYLE}\n\n{KNOWLEDGE[direction]}"},
-            {"role": "user", "content": ctx + "\nНапиши полный персональный разбор — минимум 800 слов."},
+            {"role": "user", "content": ctx +
+             "\nНапиши персональный разбор ~800 слов. Минимум теории о картах — максимум пользы, "
+             "анализа ситуации и конкретных рекомендаций, что делать дальше."},
         ],
         temperature=0.9, max_tokens=4096, timeout=300,
     )
@@ -127,7 +128,7 @@ def generate_reading(order):
         pairs.append((d, body))
         log.info("  ✓ %s — %d слов", d, len(body.split()))
 
-    header = f"Здравствуйте, {order.get('customer_name','')}. Ниже — ваш персональный разбор от Маргариты.\n\n"
-    footer = ("\n\n— \nС теплом и вниманием к вашей истории,\nМаргарита · Margo Karat")
+    header = f"{order.get('customer_name','')}, вот ваш разбор от Маргариты.\n\n"
+    footer = ("\n\n— \nС теплом,\nМаргарита · Margo Karat")
     full = header + "\n\n\n".join(sections) + footer
     return full, pairs

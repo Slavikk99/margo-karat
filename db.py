@@ -1,10 +1,25 @@
 # -*- coding: utf-8 -*-
 """Работа с Supabase через REST (service key обходит RLS)."""
 import logging
+import datetime as dt
 import requests
 from config import SUPABASE_URL, SERVICE_KEY
 
 log = logging.getLogger("oracle.db")
+
+# Внутренний статус -> человекочитаемый (для клиента и админа)
+STATUS_RU = {
+    "WAITING_PAYMENT": "🕐 Ожидает оплату",
+    "PAYMENT_CHECK": "💳 На проверке оплаты",
+    "APPROVED": "✅ Оплата подтверждена",
+    "AI_PROCESSING": "✨ Выполняется расклад",
+    "WAITING_ADMIN": "🌙 Готов к отправке",
+    "SENT": "📜 Завершён",
+    "COMPLETED": "📜 Завершён",
+    "CONSULT_PAID": "✅ Оплачено, согласуем время",
+    "REJECTED": "❌ Отклонён",
+    "NEW": "🔮 Оформление",
+}
 
 
 def _h(extra=None):
@@ -68,6 +83,54 @@ def orders_by_status(status, limit=10):
 def user_orders(tg_id, limit=10):
     return select("oracle_orders", {"telegram_id": f"eq.{tg_id}", "select": "*",
                                     "order": "created_at.desc", "limit": str(limit)})
+
+
+def active_order(tg_id):
+    """Активный заказ пользователя, ожидающий оплаты/проверки (антидубль)."""
+    rows = select("oracle_orders", {
+        "telegram_id": f"eq.{tg_id}",
+        "status": "in.(WAITING_PAYMENT,PAYMENT_CHECK)",
+        "select": "*", "order": "created_at.desc", "limit": "1"})
+    return rows[0] if rows else None
+
+
+def recent_duplicate(tg_id, package):
+    """Есть ли такой же заказ за последние 30 минут."""
+    since = (dt.datetime.utcnow() - dt.timedelta(minutes=30)).isoformat()
+    rows = select("oracle_orders", {
+        "telegram_id": f"eq.{tg_id}", "package": f"eq.{package}",
+        "created_at": f"gte.{since}", "select": "id", "limit": "1"})
+    return bool(rows)
+
+
+def make_order_code(order_no):
+    return f"MK-{dt.datetime.utcnow().year}-{int(order_no):06d}"
+
+
+# ---------- лог переписки (для админ-панели чатов) ----------
+def log_message(tg_id, role, text):
+    try:
+        insert("oracle_messages", {"telegram_id": tg_id, "role": role, "text": (text or "")[:4000]})
+    except Exception:
+        pass
+
+
+def chat_history(tg_id, limit=20):
+    rows = select("oracle_messages", {"telegram_id": f"eq.{tg_id}", "select": "*",
+                                      "order": "created_at.desc", "limit": str(limit)})
+    return list(reversed(rows))
+
+
+def recent_chat_users(limit=20):
+    return select("oracle_users", {"select": "*", "order": "created_at.desc", "limit": str(limit)})
+
+
+def orders_due_review():
+    """Заказы, отправленные >1ч назад, без запрошенного отзыва."""
+    cutoff = (dt.datetime.utcnow() - dt.timedelta(hours=1)).isoformat()
+    return select("oracle_orders", {
+        "status": "in.(SENT,COMPLETED)", "review_sent": "eq.false",
+        "sent_at": f"lt.{cutoff}", "select": "*", "limit": "10"})
 
 
 # ---------- настройки (admin chat id) ----------

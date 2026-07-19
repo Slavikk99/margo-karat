@@ -12,12 +12,31 @@ MARGO KARAT — Telegram AI Oracle. Единая точка запуска.
 import asyncio
 import logging
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 import db
 from config import (CLIENT_BOT_TOKEN, ADMIN_BOT_TOKEN, SUPABASE_URL, SERVICE_KEY,
                     GROQ_API_KEY, POLL_SEC)
 from client_bot import build_client_app
 from admin_bot import build_admin_app, notify_new_order, notify_reading_ready
 from ai_agent import generate_reading
+
+
+async def send_review_requests(client_app):
+    """Через 1 час после отправки — просим оценку и предлагаем консультацию."""
+    for o in db.orders_due_review():
+        try:
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton(f"{n}⭐", callback_data=f"rate|{o['id']}|{n}") for n in range(1, 6)
+            ]])
+            await client_app.bot.send_message(
+                o["telegram_id"],
+                "Надеюсь, расклад оказался для вас полезным. 🌙\n\n"
+                "Буду благодарна за отзыв — оцените работу по пятибалльной шкале:",
+                reply_markup=kb)
+            db.set_order(o["id"], {"review_sent": True})
+        except Exception:
+            log.exception("Не удалось запросить отзыв по заказу %s", o.get("id"))
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -50,6 +69,7 @@ async def ai_worker(client_app, admin_app):
                 except Exception:
                     log.exception("Ошибка генерации заказа %s", oid)
                     db.set_order(oid, {"status": "APPROVED"})  # вернём в очередь
+            await send_review_requests(client_app)
         except Exception:
             log.exception("Ошибка цикла воркера")
         await asyncio.sleep(POLL_SEC)
