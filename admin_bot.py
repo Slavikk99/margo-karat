@@ -44,6 +44,31 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["await_code"] = True
 
 
+STATUS_FILTERS = [
+    ("Новые/на проверке", "PAYMENT_CHECK"),
+    ("Ожидают оплату", "WAITING_PAYMENT"),
+    ("В работе", "AI_PROCESSING"),
+    ("Готовы к отправке", "WAITING_ADMIN"),
+    ("Завершённые", "SENT"),
+    ("Консультации", "CONSULT_PAID"),
+    ("Отменённые", "CANCELLED"),
+]
+
+
+async def cmd_orders(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update.effective_chat.id):
+        return
+    kb = [[InlineKeyboardButton(name, callback_data=f"ordlist|{st}")] for name, st in STATUS_FILTERS]
+    kb.append([InlineKeyboardButton("📋 Все последние", callback_data="ordlist|ALL")])
+    await update.message.reply_text("📦 Заказы — выберите категорию:", reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def _order_short(o):
+    code = o.get("order_code") or db.make_order_code(o.get("order_no", 0))
+    created = (o.get("created_at", "") or "").replace("T", " ")[:16]
+    return f"{code} · {created} · {o.get('customer_name','')} · {db.STATUS_RU.get(o['status'], o['status'])}"
+
+
 async def cmd_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(update.effective_chat.id):
         return
@@ -65,8 +90,13 @@ async def cmd_chat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not msgs:
         return await update.message.reply_text("Переписки нет.")
     who = {"client": "👤", "bot": "🔮", "admin": "👑"}
-    text = "\n".join(f"{who.get(m.get('role'),'•')} {m.get('text','')}" for m in msgs)
-    await update.message.reply_text(f"💬 Переписка с {tg}:\n\n{text[:3800]}")
+    lines = []
+    for m in msgs:
+        t = (m.get("created_at", "") or "").replace("T", " ")[:16]
+        lines.append(f"{who.get(m.get('role'),'•')} [{t}] {m.get('text','')}")
+    await update.message.reply_text(
+        f"💬 Переписка с {tg}:\n\n" + "\n".join(lines)[:3600] +
+        f"\n\nОтветить: /say {tg} ваш текст")
 
 
 async def cmd_say(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -177,6 +207,42 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(q.message.chat.id):
         return await q.message.reply_text("Только для администратора.")
     action, oid = q.data.split("|", 1)
+
+    # список заказов по категории
+    if action == "ordlist":
+        st = None if oid == "ALL" else oid
+        rows = db.orders_list(st, limit=15)
+        if not rows:
+            return await q.message.reply_text("В этой категории заказов нет.")
+        kb = [[InlineKeyboardButton(await _order_short(o), callback_data=f"open|{o['id']}")] for o in rows]
+        return await q.message.reply_text("Выберите заказ:", reply_markup=InlineKeyboardMarkup(kb))
+
+    # открыть заказ целиком
+    if action == "open":
+        order = db.get_order(oid)
+        if not order:
+            return await q.message.reply_text("Заказ не найден.")
+        await q.message.reply_text(_order_caption(order), parse_mode="Markdown")
+        for ph in order.get("photos") or []:
+            fid = ph.get("file_id") if isinstance(ph, dict) else ph
+            try:
+                await q.message.reply_photo(io.BytesIO(_download_client_photo(fid)),
+                                            caption=f"Фото: {ph.get('kind','') if isinstance(ph, dict) else ''}")
+            except Exception:
+                pass
+        if order.get("payment_screenshot"):
+            try:
+                await q.message.reply_photo(io.BytesIO(_download_client_photo(order["payment_screenshot"])),
+                                            caption="💳 Скриншот оплаты")
+            except Exception:
+                pass
+        # клавиатура действий по статусу
+        if order["status"] in ("WAITING_PAYMENT", "PAYMENT_CHECK"):
+            await q.message.reply_text("Действия:", reply_markup=_pay_kb(order["id"]))
+        elif order["status"] in ("WAITING_ADMIN", "SENT"):
+            await q.message.reply_text("Действия:", reply_markup=_ready_kb(order["id"]))
+        return
+
     order = db.get_order(oid)
     if not order:
         return await q.message.reply_text("Заказ не найден.")
@@ -200,8 +266,10 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(q.message.text + "\n\n✅ Оплата подтверждена. AI создаёт расклад…")
             if client_bot:
                 try:
-                    await client_bot.send_message(order["telegram_id"],
-                        "✅ Оплата подтверждена! Маргарита приступила к вашему разбору. Скоро он придёт сюда. ✨")
+                    msg = "✅ Оплата подтверждена! Маргарита приступила к вашему разбору. Скоро он придёт сюда. ✨"
+                    if order.get("add_consult"):
+                        msg += "\n\nДату и время приватной консультации Маргарита согласует с вами отдельно."
+                    await client_bot.send_message(order["telegram_id"], msg)
                 except Exception:
                     pass
 
@@ -246,6 +314,7 @@ def build_admin_app() -> Application:
     from config import ADMIN_BOT_TOKEN
     app = Application.builder().token(ADMIN_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("orders", cmd_orders))
     app.add_handler(CommandHandler("users", cmd_users))
     app.add_handler(CommandHandler("chat", cmd_chat))
     app.add_handler(CommandHandler("say", cmd_say))

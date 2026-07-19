@@ -18,6 +18,7 @@ STATUS_RU = {
     "COMPLETED": "📜 Завершён",
     "CONSULT_PAID": "✅ Оплачено, согласуем время",
     "REJECTED": "❌ Отклонён",
+    "CANCELLED": "❌ Отменён",
     "NEW": "🔮 Оформление",
 }
 
@@ -63,7 +64,14 @@ def upsert_user(tg_id, username, first_name, last_name=""):
 
 
 def create_order(data):
-    return insert("oracle_orders", data)
+    """Создать заказ. Если новых колонок (add_consult/amount) ещё нет в БД —
+    повторяем без них, чтобы заказ гарантированно создался."""
+    try:
+        return insert("oracle_orders", data)
+    except Exception as e:
+        log.warning("create_order retry без доп.полей: %s", e)
+        safe = {k: v for k, v in data.items() if k not in ("add_consult", "amount")}
+        return insert("oracle_orders", safe)
 
 
 def get_order(order_id):
@@ -78,6 +86,13 @@ def set_order(order_id, payload):
 def orders_by_status(status, limit=10):
     return select("oracle_orders", {"status": f"eq.{status}", "select": "*",
                                     "order": "created_at.asc", "limit": str(limit)})
+
+
+def orders_list(status=None, limit=15):
+    params = {"select": "*", "order": "created_at.desc", "limit": str(limit)}
+    if status:
+        params["status"] = f"eq.{status}"
+    return select("oracle_orders", params)
 
 
 def user_orders(tg_id, limit=10):
