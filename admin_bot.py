@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Админ-бот Margo Karat — оплаты, проверка раскладов, просмотр чатов."""
+"""Админ-бот Margo Karat — CRM-панель управления (всё на кнопках)."""
 import io
 import logging
+import datetime as dt
 
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup)
 from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
                           MessageHandler, ContextTypes, filters)
 
@@ -13,6 +15,25 @@ import db
 from config import ADMIN_SETUP_CODE, CLIENT_BOT_TOKEN
 
 log = logging.getLogger("oracle.admin")
+
+# нижнее меню админа
+M_ORDERS = "📦 Заказы"
+M_CLIENTS = "👥 Клиенты"
+M_RATINGS = "⭐ Оценки"
+M_SUPPORT = "💬 Обращения"
+M_STATS = "📊 Статистика"
+ADMIN_MENU = ReplyKeyboardMarkup(
+    [[M_ORDERS], [M_CLIENTS, M_RATINGS], [M_SUPPORT, M_STATS]], resize_keyboard=True)
+
+STATUS_FILTERS = [
+    ("🆕 На проверке оплаты", "PAYMENT_CHECK"),
+    ("🕐 Ожидают оплату", "WAITING_PAYMENT"),
+    ("⏳ В работе", "AI_PROCESSING"),
+    ("📤 Готовы к отправке", "WAITING_ADMIN"),
+    ("✅ Завершённые", "SENT"),
+    ("👑 Консультации", "CONSULT_PAID"),
+    ("❌ Отменённые", "CANCELLED"),
+]
 
 
 def _download_client_photo(file_id):
@@ -30,124 +51,135 @@ def _is_admin(chat_id):
     return saved and str(chat_id) == str(saved)
 
 
-# ---------------- /start (привязка владельца) ----------------
+# ---------------- /start ----------------
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if _is_admin(chat_id):
-        await update.message.reply_text(
-            "Вы — администратор Margo Karat. Сюда приходят заказы.\n\n"
-            "Команды:\n/users — список клиентов\n/chat <id> — переписка\n/say <id> текст — написать клиенту")
-        return
+        return await update.message.reply_text(
+            "👑 Панель управления Margo Karat. Выберите раздел ниже.", reply_markup=ADMIN_MENU)
     if db.get_setting("admin_chat_id"):
-        await update.message.reply_text("Админ уже назначен. Доступ запрещён.")
-        return
-    await update.message.reply_text("Это админ-бот Margo Karat.\nВведите код настройки, чтобы стать администратором:")
+        return await update.message.reply_text("Админ уже назначен. Доступ запрещён.")
+    await update.message.reply_text("Это админ-бот Margo Karat.\nВведите код настройки:")
     ctx.user_data["await_code"] = True
 
 
-STATUS_FILTERS = [
-    ("Новые/на проверке", "PAYMENT_CHECK"),
-    ("Ожидают оплату", "WAITING_PAYMENT"),
-    ("В работе", "AI_PROCESSING"),
-    ("Готовы к отправке", "WAITING_ADMIN"),
-    ("Завершённые", "SENT"),
-    ("Консультации", "CONSULT_PAID"),
-    ("Отменённые", "CANCELLED"),
-]
-
-
-async def cmd_orders(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ---------------- меню (текстовые кнопки) ----------------
+async def on_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    txt = update.message.text
     if not _is_admin(update.effective_chat.id):
+        # код настройки
+        if ctx.user_data.get("await_code"):
+            ctx.user_data.pop("await_code")
+            if txt.strip() == ADMIN_SETUP_CODE:
+                db.set_setting("admin_chat_id", update.effective_chat.id)
+                return await update.message.reply_text("✅ Готово! Вы администратор.", reply_markup=ADMIN_MENU)
+            return await update.message.reply_text("❌ Неверный код.")
         return
-    kb = [[InlineKeyboardButton(name, callback_data=f"ordlist|{st}")] for name, st in STATUS_FILTERS]
-    kb.append([InlineKeyboardButton("📋 Все последние", callback_data="ordlist|ALL")])
-    await update.message.reply_text("📦 Заказы — выберите категорию:", reply_markup=InlineKeyboardMarkup(kb))
+
+    # ответ клиенту (после кнопки «Написать»)
+    reply_to = ctx.user_data.pop("reply_to", None)
+    if reply_to:
+        try:
+            await bridge.client_bot.send_message(int(reply_to), txt)
+            db.log_message(int(reply_to), "admin", txt)
+            return await update.message.reply_text("✅ Отправлено клиенту.", reply_markup=ADMIN_MENU)
+        except Exception as e:
+            return await update.message.reply_text(f"Не удалось отправить: {e}")
+
+    # редактирование расклада
+    edit_id = ctx.user_data.pop("edit_order", None)
+    if edit_id:
+        db.set_order(edit_id, {"result": txt, "status": "WAITING_ADMIN"})
+        return await update.message.reply_text("Текст обновлён.", reply_markup=_ready_kb(edit_id))
+
+    if txt == M_ORDERS:
+        kb = [[InlineKeyboardButton(n, callback_data=f"ordlist|{s}")] for n, s in STATUS_FILTERS]
+        kb.append([InlineKeyboardButton("📋 Все последние", callback_data="ordlist|ALL")])
+        return await update.message.reply_text("📦 Заказы — выберите категорию:", reply_markup=InlineKeyboardMarkup(kb))
+    if txt == M_CLIENTS:
+        return await _show_clients(update.message)
+    if txt == M_RATINGS:
+        return await _show_ratings(update.message)
+    if txt == M_SUPPORT:
+        return await _show_support(update.message)
+    if txt == M_STATS:
+        return await _show_stats(update.message)
 
 
-async def _order_short(o):
-    code = o.get("order_code") or db.make_order_code(o.get("order_no", 0))
-    created = (o.get("created_at", "") or "").replace("T", " ")[:16]
-    return f"{code} · {created} · {o.get('customer_name','')} · {db.STATUS_RU.get(o['status'], o['status'])}"
-
-
-async def cmd_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not _is_admin(update.effective_chat.id):
-        return
+# ---------------- разделы ----------------
+async def _show_clients(message):
     rows = db.recent_chat_users()
     if not rows:
-        return await update.message.reply_text("Пользователей пока нет.")
-    lines = [f"{u.get('first_name','')} @{u.get('username') or '—'} — id `{u.get('telegram_id')}`" for u in rows]
-    await update.message.reply_text("👥 Клиенты:\n\n" + "\n".join(lines) +
-                                    "\n\n/chat <id> — переписка, /say <id> текст — написать", parse_mode="Markdown")
+        return await message.reply_text("Клиентов пока нет.")
+    kb = [[InlineKeyboardButton(f"{u.get('first_name','')} @{u.get('username') or '—'}",
+                                callback_data=f"usr|{u.get('telegram_id')}")] for u in rows]
+    await message.reply_text("👥 Клиенты:", reply_markup=InlineKeyboardMarkup(kb))
 
 
-async def cmd_chat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not _is_admin(update.effective_chat.id):
-        return
-    if not ctx.args:
-        return await update.message.reply_text("Формат: /chat <telegram_id>")
-    tg = ctx.args[0]
-    msgs = db.chat_history(tg)
-    if not msgs:
-        return await update.message.reply_text("Переписки нет.")
-    who = {"client": "👤", "bot": "🔮", "admin": "👑"}
-    lines = []
-    for m in msgs:
+async def _show_ratings(message):
+    rows = db.ratings()
+    if not rows:
+        return await message.reply_text("Оценок пока нет.")
+    vals = [r["rating"] for r in rows if r.get("rating")]
+    avg = round(sum(vals) / len(vals), 2) if vals else 0
+    lines = [f"📊 Средняя оценка: *{avg}* (всего {len(vals)})\n"]
+    for r in rows[:15]:
+        d = (r.get("created_at", "") or "")[:10]
+        lines.append(f"{'⭐'*int(r['rating'])} — {r.get('customer_name','')} ({r.get('order_code','')}) · {d}")
+    await message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def _show_support(message):
+    rows = db.support_messages()
+    if not rows:
+        return await message.reply_text("Обращений пока нет.")
+    for m in rows[:10]:
         t = (m.get("created_at", "") or "").replace("T", " ")[:16]
-        lines.append(f"{who.get(m.get('role'),'•')} [{t}] {m.get('text','')}")
-    await update.message.reply_text(
-        f"💬 Переписка с {tg}:\n\n" + "\n".join(lines)[:3600] +
-        f"\n\nОтветить: /say {tg} ваш текст")
+        u = db.get_user(m.get("telegram_id")) or {}
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 Ответить", callback_data=f"reply|{m.get('telegram_id')}")]])
+        await message.reply_text(
+            f"📩 [{t}] {u.get('first_name','')} @{u.get('username') or '—'} (id {m.get('telegram_id')})\n\n"
+            f"«{m.get('text','')}»", reply_markup=kb)
 
 
-async def cmd_say(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not _is_admin(update.effective_chat.id):
-        return
-    if len(ctx.args) < 2:
-        return await update.message.reply_text("Формат: /say <telegram_id> текст")
-    tg = ctx.args[0]
-    text = " ".join(ctx.args[1:])
-    client_bot = bridge.client_bot
-    try:
-        await client_bot.send_message(int(tg), text)
-        db.log_message(int(tg), "admin", text)
-        await update.message.reply_text("✅ Отправлено клиенту.")
-    except Exception as e:
-        await update.message.reply_text(f"Не удалось отправить: {e}")
+async def _show_stats(message):
+    orders = db.orders_list(None, limit=500)
+    from collections import Counter
+    c = Counter(o.get("status") for o in orders)
+    paid = c.get("APPROVED", 0) + c.get("AI_PROCESSING", 0) + c.get("WAITING_ADMIN", 0) + c.get("SENT", 0) + c.get("CONSULT_PAID", 0)
+    lines = [
+        "📊 *Статистика*",
+        f"Всего заказов: {len(orders)}",
+        f"🆕 На проверке: {c.get('PAYMENT_CHECK',0)}",
+        f"🕐 Ждут оплату: {c.get('WAITING_PAYMENT',0)}",
+        f"✅ Оплачено/в работе: {paid}",
+        f"📜 Отправлено: {c.get('SENT',0)}",
+        f"❌ Отменено: {c.get('CANCELLED',0)}",
+    ]
+    await message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
-async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if ctx.user_data.get("await_code"):
-        ctx.user_data.pop("await_code")
-        if update.message.text.strip() == ADMIN_SETUP_CODE:
-            db.set_setting("admin_chat_id", update.effective_chat.id)
-            await update.message.reply_text("✅ Готово! Вы назначены администратором. Сюда будут приходить заказы.")
-        else:
-            await update.message.reply_text("❌ Неверный код.")
-        return
-    edit_id = ctx.user_data.pop("edit_order", None)
-    if edit_id and _is_admin(update.effective_chat.id):
-        db.set_order(edit_id, {"result": update.message.text, "status": "WAITING_ADMIN"})
-        await update.message.reply_text("Текст обновлён. Нажмите «Отправить клиенту», когда готовы.",
-                                        reply_markup=_ready_kb(edit_id))
-
-
-# ---------------- уведомления ----------------
+# ---------------- карточки/клавиатуры ----------------
 def _order_caption(o):
     dirs = ", ".join(o.get("directions") or [])
     code = o.get("order_code") or db.make_order_code(o.get("order_no", 0))
+    amount = o.get("amount")
+    price = f"{amount:.2f} €" if amount else "—"
+    created = (o.get("created_at", "") or "").replace("T", " ")[:16]
     return (
-        f"🔮 *Новый заказ {code}*\n\n"
+        f"🔮 *Заказ {code}*\n\n"
         f"Клиент: {o.get('customer_name','')} {o.get('customer_surname','') or ''}\n"
         f"Telegram: @{o.get('username') or '—'} (id {o.get('telegram_id')})\n"
-        f"Телефон: {o.get('phone','—')}\n"
-        f"Пакет: {o.get('package','')}\n"
+        f"Телефон: {o.get('phone') or '—'}\n"
+        f"Пакет: {o.get('package','')}{' + консультация' if o.get('add_consult') else ''}\n"
         f"Направления: {dirs}\n"
-        f"Рука (хиромантия): {o.get('hand_side','—')}\n"
+        f"Рука: {o.get('hand_side') or '—'}\n"
         f"Дата рождения: {o.get('birth_date') or '—'}\n"
         f"Город: {o.get('birth_city') or '—'}, страна: {o.get('birth_country') or '—'}\n"
         f"Время рождения: {o.get('birth_time') or '—'}\n"
-        f"Вопрос: {o.get('question','—')}\n"
+        f"Вопрос/детали: {o.get('question') or '—'}\n"
+        f"Сумма: {price}\n"
+        f"Создан: {created}\n"
         f"Статус: {db.STATUS_RU.get(o.get('status'), o.get('status'))}")
 
 
@@ -160,46 +192,62 @@ def _pay_kb(order_id):
 
 def _ready_kb(order_id):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👁 Посмотреть", callback_data=f"view|{order_id}")],
+        [InlineKeyboardButton("👁 Посмотреть расклад", callback_data=f"view|{order_id}")],
         [InlineKeyboardButton("📤 Отправить клиенту", callback_data=f"send|{order_id}"),
          InlineKeyboardButton("🔄 Переделать", callback_data=f"regen|{order_id}")],
         [InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit|{order_id}")],
     ])
 
 
+# ---------------- уведомления от клиентского бота ----------------
+async def _send_admin(admin_app, text, kb=None):
+    chat = db.get_setting("admin_chat_id")
+    if not chat:
+        log.warning("admin_chat_id не задан")
+        return None
+    return await admin_app.bot.send_message(int(chat), text, reply_markup=kb, parse_mode="Markdown")
+
+
 async def notify_new_order(admin_app, order):
     chat = db.get_setting("admin_chat_id")
     if not chat:
-        log.warning("admin_chat_id не задан — заказ %s не отправлен", order.get("id"))
+        log.error("admin_chat_id не задан — заказ %s не отправлен", order.get("id"))
         return
     await admin_app.bot.send_message(int(chat), _order_caption(order),
                                      reply_markup=_pay_kb(order["id"]), parse_mode="Markdown")
-    # фото клиента (ладонь/кофе)
     for ph in order.get("photos") or []:
         fid = ph.get("file_id") if isinstance(ph, dict) else ph
-        cap = ph.get("kind", "") if isinstance(ph, dict) else ""
         try:
-            await admin_app.bot.send_photo(int(chat), io.BytesIO(_download_client_photo(fid)), caption=f"Фото: {cap}")
+            await admin_app.bot.send_photo(int(chat), io.BytesIO(_download_client_photo(fid)),
+                                           caption=f"Фото: {ph.get('kind','') if isinstance(ph, dict) else ''}")
         except Exception:
-            log.warning("Не переслать фото заказа %s", order.get("id"))
-    # скриншот оплаты
-    shot = order.get("payment_screenshot")
-    if shot:
+            log.warning("не переслать фото %s", order.get("id"))
+    if order.get("payment_screenshot"):
         try:
-            await admin_app.bot.send_photo(int(chat), io.BytesIO(_download_client_photo(shot)),
+            await admin_app.bot.send_photo(int(chat), io.BytesIO(_download_client_photo(order["payment_screenshot"])),
                                            caption="💳 Скриншот оплаты")
         except Exception:
-            log.warning("Не переслать скриншот заказа %s", order.get("id"))
+            log.warning("не переслать скриншот %s", order.get("id"))
 
 
 async def notify_reading_ready(admin_app, order):
-    chat = db.get_setting("admin_chat_id")
-    if not chat:
-        return
-    code = order.get("order_code", "")
-    await admin_app.bot.send_message(
-        int(chat), f"🌙 Готов расклад по заказу {code} ({order.get('customer_name','')}). Проверьте перед отправкой.",
-        reply_markup=_ready_kb(order["id"]))
+    await _send_admin(admin_app,
+                      f"🌙 Готов расклад {order.get('order_code','')} ({order.get('customer_name','')}). Проверьте.",
+                      _ready_kb(order["id"]))
+
+
+async def notify_support(admin_app, user, text):
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 Ответить", callback_data=f"reply|{user.id}")]])
+    await _send_admin(admin_app,
+                      f"📩 *Новое обращение*\nИмя: {user.first_name or ''}\nUsername: @{user.username or '—'}\n"
+                      f"Telegram ID: {user.id}\n\nСообщение:\n«{text}»", kb)
+
+
+async def notify_rating(admin_app, user, stars, order_id):
+    o = db.get_order(order_id) or {}
+    await _send_admin(admin_app,
+                      f"⭐ *Новая оценка* {('⭐'*stars)}\nКлиент: {user.first_name or ''} @{user.username or '—'}\n"
+                      f"Заказ: {o.get('order_code','')}")
 
 
 # ---------------- callbacks ----------------
@@ -208,28 +256,29 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     if not _is_admin(q.message.chat.id):
         return await q.message.reply_text("Только для администратора.")
-    action, oid = q.data.split("|", 1)
+    action, arg = q.data.split("|", 1)
 
-    # список заказов по категории
     if action == "ordlist":
-        st = None if oid == "ALL" else oid
-        rows = db.orders_list(st, limit=15)
+        st = None if arg == "ALL" else arg
+        rows = db.orders_list(st, limit=20)
         if not rows:
-            return await q.message.reply_text("В этой категории заказов нет.")
-        kb = [[InlineKeyboardButton(await _order_short(o), callback_data=f"open|{o['id']}")] for o in rows]
+            return await q.message.reply_text("В этой категории пусто.")
+        kb = []
+        for o in rows:
+            code = o.get("order_code") or db.make_order_code(o.get("order_no", 0))
+            kb.append([InlineKeyboardButton(f"{code} · {o.get('customer_name','')}",
+                                            callback_data=f"open|{o['id']}")])
         return await q.message.reply_text("Выберите заказ:", reply_markup=InlineKeyboardMarkup(kb))
 
-    # открыть заказ целиком
     if action == "open":
-        order = db.get_order(oid)
+        order = db.get_order(arg)
         if not order:
             return await q.message.reply_text("Заказ не найден.")
         await q.message.reply_text(_order_caption(order), parse_mode="Markdown")
         for ph in order.get("photos") or []:
             fid = ph.get("file_id") if isinstance(ph, dict) else ph
             try:
-                await q.message.reply_photo(io.BytesIO(_download_client_photo(fid)),
-                                            caption=f"Фото: {ph.get('kind','') if isinstance(ph, dict) else ''}")
+                await q.message.reply_photo(io.BytesIO(_download_client_photo(fid)))
             except Exception:
                 pass
         if order.get("payment_screenshot"):
@@ -238,77 +287,92 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                             caption="💳 Скриншот оплаты")
             except Exception:
                 pass
-        # клавиатура действий по статусу
         if order["status"] in ("WAITING_PAYMENT", "PAYMENT_CHECK"):
             await q.message.reply_text("Действия:", reply_markup=_pay_kb(order["id"]))
-        elif order["status"] in ("WAITING_ADMIN", "SENT"):
+        elif order["status"] in ("WAITING_ADMIN", "SENT", "AI_PROCESSING"):
             await q.message.reply_text("Действия:", reply_markup=_ready_kb(order["id"]))
         return
 
-    order = db.get_order(oid)
+    if action == "usr":
+        u = db.get_user(arg) or {}
+        orders = db.user_orders(arg, limit=5)
+        hist = "\n".join(f"• {o.get('order_code','')} — {db.STATUS_RU.get(o['status'], o['status'])}" for o in orders) or "нет"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💬 Написать клиенту", callback_data=f"reply|{arg}")],
+            [InlineKeyboardButton("📜 Переписка", callback_data=f"hist|{arg}")],
+        ])
+        return await q.message.reply_text(
+            f"👤 *{u.get('first_name','')} {u.get('last_name','') or ''}*\n"
+            f"Username: @{u.get('username') or '—'}\nID: {arg}\nТелефон: {u.get('phone') or '—'}\n\n"
+            f"Заказы:\n{hist}", reply_markup=kb, parse_mode="Markdown")
+
+    if action == "hist":
+        msgs = db.chat_history(arg)
+        who = {"client": "👤", "bot": "🔮", "admin": "👑", "support": "📩"}
+        lines = [f"{who.get(m.get('role'),'•')} [{(m.get('created_at','') or '')[:16].replace('T',' ')}] {m.get('text','')}" for m in msgs]
+        return await q.message.reply_text("💬 Переписка:\n\n" + ("\n".join(lines)[:3600] or "пусто"))
+
+    if action == "reply":
+        ctx.user_data["reply_to"] = arg
+        return await q.message.reply_text(f"Напишите сообщение для клиента (id {arg}) — оно уйдёт от имени бота:")
+
+    # действия по заказу
+    order = db.get_order(arg)
     if not order:
         return await q.message.reply_text("Заказ не найден.")
     client_bot = bridge.client_bot
 
     if action == "pay_ok":
         if order.get("package") == "Приватная консультация":
-            db.set_order(oid, {"status": "CONSULT_PAID"})
+            db.set_order(arg, {"status": "CONSULT_PAID"})
             await q.edit_message_text(q.message.text + "\n\n✅ Оплата подтверждена (консультация).")
-            if client_bot:
-                try:
-                    await client_bot.send_message(order["telegram_id"],
-                        "✅ Оплата подтверждена! Спасибо. 🌙\n\n"
-                        "Дату и время вашей приватной консультации Маргарита согласует с вами отдельно — "
-                        "ожидайте сообщения здесь.")
-                    db.log_message(order["telegram_id"], "bot", "Оплата консультации подтверждена")
-                except Exception:
-                    pass
-        else:
-            db.set_order(oid, {"status": "APPROVED"})
-            await q.edit_message_text(q.message.text + "\n\n✅ Оплата подтверждена. AI создаёт расклад…")
-            if client_bot:
-                try:
-                    msg = "✅ Оплата подтверждена! Маргарита приступила к вашему разбору. Скоро он придёт сюда. ✨"
-                    if order.get("add_consult"):
-                        msg += "\n\nДату и время приватной консультации Маргарита согласует с вами отдельно."
-                    await client_bot.send_message(order["telegram_id"], msg)
-                except Exception:
-                    pass
-
-    elif action == "pay_no":
-        db.set_order(oid, {"status": "REJECTED"})
-        await q.edit_message_text(q.message.text + "\n\n❌ Оплата отклонена.")
-        if client_bot:
             try:
                 await client_bot.send_message(order["telegram_id"],
-                    "К сожалению, оплата не найдена. Проверьте перевод или напишите нам — /start.")
+                    "✅ Оплата подтверждена! Спасибо. 🌙\nМаргарита свяжется с вами, чтобы согласовать дату и время.")
             except Exception:
                 pass
+        else:
+            db.set_order(arg, {"status": "APPROVED"})
+            await q.edit_message_text(q.message.text + "\n\n✅ Оплата подтверждена. AI создаёт расклад…")
+            try:
+                msg = "✅ Оплата подтверждена! Маргарита приступила к вашему разбору. Скоро он придёт сюда. ✨"
+                if order.get("add_consult"):
+                    msg += "\n\nДату и время приватной консультации согласуем отдельно."
+                await client_bot.send_message(order["telegram_id"], msg)
+            except Exception:
+                pass
+
+    elif action == "pay_no":
+        db.set_order(arg, {"status": "REJECTED"})
+        await q.edit_message_text(q.message.text + "\n\n❌ Оплата отклонена.")
+        try:
+            await client_bot.send_message(order["telegram_id"],
+                "К сожалению, оплата не найдена. Проверьте перевод или напишите нам — /start.")
+        except Exception:
+            pass
 
     elif action == "view":
         txt = order.get("result") or "Расклад ещё не создан."
         for i in range(0, len(txt), 3800):
             await q.message.reply_text(txt[i:i+3800])
-        await q.message.reply_text("Действия:", reply_markup=_ready_kb(oid))
+        await q.message.reply_text("Действия:", reply_markup=_ready_kb(arg))
 
     elif action == "regen":
-        db.set_order(oid, {"status": "APPROVED", "result": None})
+        db.set_order(arg, {"status": "APPROVED", "result": None})
         await q.message.reply_text("🔄 Отправлено на перегенерацию.")
 
     elif action == "edit":
-        ctx.user_data["edit_order"] = oid
+        ctx.user_data["edit_order"] = arg
         await q.message.reply_text("Пришлите новый текст расклада одним сообщением.")
 
     elif action == "send":
         txt = order.get("result") or ""
         if not txt:
             return await q.message.reply_text("Текст расклада пуст.")
-        if client_bot:
-            for i in range(0, len(txt), 3800):
-                await client_bot.send_message(order["telegram_id"], txt[i:i+3800])
-            db.log_message(order["telegram_id"], "bot", "[расклад отправлен]")
-        import datetime as dt
-        db.set_order(oid, {"status": "SENT", "sent_at": dt.datetime.utcnow().isoformat()})
+        for i in range(0, len(txt), 3800):
+            await client_bot.send_message(order["telegram_id"], txt[i:i+3800])
+        db.log_message(order["telegram_id"], "bot", "[расклад отправлен]")
+        db.set_order(arg, {"status": "SENT", "sent_at": dt.datetime.utcnow().isoformat()})
         await q.message.reply_text("📤 Расклад отправлен клиенту. Заказ завершён.")
 
 
@@ -316,10 +380,6 @@ def build_admin_app() -> Application:
     from config import ADMIN_BOT_TOKEN
     app = Application.builder().token(ADMIN_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("orders", cmd_orders))
-    app.add_handler(CommandHandler("users", cmd_users))
-    app.add_handler(CommandHandler("chat", cmd_chat))
-    app.add_handler(CommandHandler("say", cmd_say))
     app.add_handler(CallbackQueryHandler(on_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_menu))
     return app

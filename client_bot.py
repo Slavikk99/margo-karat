@@ -328,6 +328,20 @@ NATAL_FIELDS = [
 ]
 QUESTION_FIELD = ("question", "Дополните свой вопрос или задайте свой вопрос.")
 
+# приватная консультация — собственная анкета
+CONSULT_FIELDS = [
+    ("customer_name", "Как вас зовут? (имя)"),
+    ("customer_surname", "Ваша фамилия?"),
+    ("phone", "Ваш номер телефона? (с кодом страны, например +49…)"),
+    ("birth_date", "Дата рождения? (например, 14.03.1990)"),
+    ("birth_time", "Точное время рождения? (например, 14:30)"),
+    ("birth_city", "Город рождения?"),
+    ("birth_country", "Страна рождения?"),
+    ("consult_day", "📅 В какой день вам было бы удобно провести консультацию?"),
+    ("consult_time", "🕒 В какое время вам было бы удобно?"),
+    ("question", "Дополнительный комментарий (необязательно)."),
+]
+
 
 def _field_kb(key):
     rows = []
@@ -361,10 +375,13 @@ async def _advance(message, ctx, value):
 
 async def _start_collect(message, ctx):
     ctx.user_data[STEP] = 0
-    fields = BASE_FIELDS[:]
-    if "Натальная карта" in ctx.user_data[D]["directions"]:
-        fields += NATAL_FIELDS
-    fields += [QUESTION_FIELD]
+    if ctx.user_data[D]["package"] == CONSULT:
+        fields = CONSULT_FIELDS[:]
+    else:
+        fields = BASE_FIELDS[:]
+        if "Натальная карта" in ctx.user_data[D]["directions"]:
+            fields += NATAL_FIELDS
+        fields += [QUESTION_FIELD]
     ctx.user_data["_fields"] = fields
     await message.reply_text("Заполним короткую анкету по шагам. В любой момент можно нажать «Отменить».")
     await _ask_field(message, ctx)
@@ -375,7 +392,14 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # поддержка / связь с Маргаритой
     if ctx.user_data.get("support"):
         ctx.user_data.pop("support")
-        db.log_message(update.effective_user.id, "client", text)
+        u = update.effective_user
+        db.log_message(u.id, "support", text)
+        try:
+            if bridge.admin_app is not None:
+                from admin_bot import notify_support
+                await notify_support(bridge.admin_app, u, text)
+        except Exception:
+            log.exception("Не удалось передать обращение админу")
         return await update.message.reply_text(
             "Спасибо, я передала ваше сообщение Маргарите. Она ответит здесь. 🌙", reply_markup=MENU_KB)
 
@@ -523,6 +547,11 @@ async def _on_paid(q, ctx):
             return await q.message.reply_text("Такой заказ уже создан минуту назад и в обработке. 🙏")
         u = q.from_user
         total = _order_total(d["package"], d.get("add_consult"))
+        question = d.get("question")
+        if d["package"] == CONSULT:
+            question = (f"Желаемый день: {d.get('consult_day','—')}; "
+                        f"время: {d.get('consult_time','—')}; "
+                        f"комментарий: {d.get('question') or '—'}")
         try:
             order = db.create_order({
                 "telegram_id": u.id, "username": u.username or "", "first_name": u.first_name or "",
@@ -531,7 +560,7 @@ async def _on_paid(q, ctx):
                 "birth_city": d.get("birth_city"), "birth_country": d.get("birth_country"),
                 "birth_time": d.get("birth_time"),
                 "package": d["package"], "directions": d["directions"],
-                "hand_side": d.get("hand_side"), "question": d.get("question"),
+                "hand_side": d.get("hand_side"), "question": question,
                 "photos": d["photos"], "add_consult": d.get("add_consult", False),
                 "amount": total, "status": "WAITING_PAYMENT",
             })
@@ -546,8 +575,12 @@ async def _on_paid(q, ctx):
             pass
         ctx.user_data["_await_payment_shot"] = order["id"]
         await q.message.reply_text(
-            f"Заказ *{code}* создан. 📎\n\nТеперь пришлите *скриншот перевода* — "
-            "без него заявка не уйдёт на проверку.", parse_mode="Markdown")
+            f"Заказ *{code}* создан. 📎\n\n"
+            "🚨🚨🚨 *ВНИМАНИЕ* 🚨🚨🚨\n\n"
+            "❗ *ОБЯЗАТЕЛЬНО ОТПРАВЬТЕ СКРИНШОТ ОПЛАТЫ* ❗\n\n"
+            "Без скриншота перевода заявка НЕ поступит на проверку.\n\n"
+            "📎 Отправьте фотографию перевода прямо сейчас.\n"
+            "⚠️ Без скриншота заказ будет автоматически остановлен.", parse_mode="Markdown")
     finally:
         ctx.user_data["_creating"] = False
 
@@ -588,6 +621,12 @@ async def _on_rate(q, ctx, data):
         await q.edit_message_reply_markup(reply_markup=None)
     except Exception:
         pass
+    try:
+        if bridge.admin_app is not None:
+            from admin_bot import notify_rating
+            await notify_rating(bridge.admin_app, q.from_user, int(stars), order_id)
+    except Exception:
+        log.exception("Не удалось передать оценку админу")
     kb = InlineKeyboardMarkup([[InlineKeyboardButton(
         "👑 Записаться на приватную консультацию — 49.99 €", callback_data="pkg|Приватная консультация")]])
     await q.message.reply_text(

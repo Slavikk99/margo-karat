@@ -140,6 +140,21 @@ def recent_chat_users(limit=20):
     return select("oracle_users", {"select": "*", "order": "created_at.desc", "limit": str(limit)})
 
 
+def get_user(tg_id):
+    rows = select("oracle_users", {"telegram_id": f"eq.{tg_id}", "select": "*"})
+    return rows[0] if rows else None
+
+
+def ratings(limit=30):
+    return select("oracle_orders", {"rating": "not.is.null", "select": "*",
+                                    "order": "created_at.desc", "limit": str(limit)})
+
+
+def support_messages(limit=30):
+    return select("oracle_messages", {"role": "eq.support", "select": "*",
+                                      "order": "created_at.desc", "limit": str(limit)})
+
+
 def orders_due_review():
     """Заказы, отправленные >1ч назад, без запрошенного отзыва."""
     cutoff = (dt.datetime.utcnow() - dt.timedelta(hours=1)).isoformat()
