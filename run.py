@@ -88,9 +88,10 @@ async def main():
     client_app = build_client_app()
     admin_app = build_admin_app()
 
-    # связываем боты между собой
-    client_app.bot_data["notify_admin_new_order"] = lambda order: notify_new_order(admin_app, order)
-    admin_app.bot_data["client_bot"] = client_app.bot
+    # связываем боты через модуль-мост (не через bot_data — он попадает в persistence)
+    import bridge
+    bridge.admin_app = admin_app
+    bridge.client_bot = client_app.bot
 
     async with client_app, admin_app:
         await client_app.start()

@@ -8,6 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
                           MessageHandler, ContextTypes, filters)
 
+import bridge
 import db
 from config import ADMIN_SETUP_CODE, CLIENT_BOT_TOKEN
 
@@ -106,7 +107,7 @@ async def cmd_say(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Формат: /say <telegram_id> текст")
     tg = ctx.args[0]
     text = " ".join(ctx.args[1:])
-    client_bot = ctx.application.bot_data.get("client_bot")
+    client_bot = bridge.client_bot
     try:
         await client_bot.send_message(int(tg), text)
         db.log_message(int(tg), "admin", text)
@@ -247,7 +248,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     order = db.get_order(oid)
     if not order:
         return await q.message.reply_text("Заказ не найден.")
-    client_bot = ctx.application.bot_data.get("client_bot")
+    client_bot = bridge.client_bot
 
     if action == "pay_ok":
         if order.get("package") == "Приватная консультация":

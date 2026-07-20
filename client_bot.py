@@ -18,6 +18,7 @@ except ImportError:
 from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
                           MessageHandler, ContextTypes, filters, PicklePersistence)
 
+import bridge
 import db
 from config import PAYMENT_DETAILS, PRICES
 
@@ -567,12 +568,16 @@ async def _on_payment_screenshot(update, ctx):
         "Как только Маргарита подтвердит оплату, начнётся создание вашего разбора.",
         parse_mode="Markdown", reply_markup=MENU_KB)
     ctx.user_data.clear()
-    notify = ctx.application.bot_data.get("notify_admin_new_order")
-    if notify:
-        try:
-            await notify(order)
-        except Exception:
-            log.exception("Не удалось уведомить админа о заказе %s", order_id)
+    # уведомляем админа через мост (надёжно, вне persistence)
+    try:
+        if bridge.admin_app is not None:
+            from admin_bot import notify_new_order
+            await notify_new_order(bridge.admin_app, order)
+            log.info("Заказ %s отправлен админу", order.get("order_code"))
+        else:
+            log.error("bridge.admin_app не задан — заказ %s не ушёл админу!", order_id)
+    except Exception:
+        log.exception("Не удалось уведомить админа о заказе %s", order_id)
 
 
 # ---------------- отзыв ----------------
