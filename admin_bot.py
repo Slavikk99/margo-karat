@@ -18,12 +18,20 @@ log = logging.getLogger("oracle.admin")
 
 # нижнее меню админа
 M_ORDERS = "📦 Заказы"
+M_CONSULTS = "📅 Консультации"
 M_CLIENTS = "👥 Клиенты"
 M_RATINGS = "⭐ Оценки"
 M_SUPPORT = "💬 Обращения"
 M_STATS = "📊 Статистика"
 ADMIN_MENU = ReplyKeyboardMarkup(
-    [[M_ORDERS], [M_CLIENTS, M_RATINGS], [M_SUPPORT, M_STATS]], resize_keyboard=True)
+    [[M_ORDERS, M_CONSULTS], [M_CLIENTS, M_RATINGS], [M_SUPPORT, M_STATS]], resize_keyboard=True)
+
+CONSULT_FILTERS = [
+    ("🆕 На проверке оплаты", "PAYMENT_CHECK"),
+    ("🕐 Ожидают оплату", "WAITING_PAYMENT"),
+    ("✅ Подтверждённые", "CONFIRMED"),
+    ("❌ Отменённые", "CANCELLED"),
+]
 
 STATUS_FILTERS = [
     ("🆕 На проверке оплаты", "PAYMENT_CHECK"),
@@ -96,6 +104,10 @@ async def on_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton(n, callback_data=f"ordlist|{s}")] for n, s in STATUS_FILTERS]
         kb.append([InlineKeyboardButton("📋 Все последние", callback_data="ordlist|ALL")])
         return await update.message.reply_text("📦 Заказы — выберите категорию:", reply_markup=InlineKeyboardMarkup(kb))
+    if txt == M_CONSULTS:
+        kb = [[InlineKeyboardButton(n, callback_data=f"clist|{s}")] for n, s in CONSULT_FILTERS]
+        return await update.message.reply_text("📅 Консультации — выберите категорию:",
+                                               reply_markup=InlineKeyboardMarkup(kb))
     if txt == M_CLIENTS:
         return await _show_clients(update.message)
     if txt == M_RATINGS:
@@ -193,9 +205,18 @@ def _pay_kb(order_id):
 def _ready_kb(order_id):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("👁 Посмотреть расклад", callback_data=f"view|{order_id}")],
-        [InlineKeyboardButton("📤 Отправить клиенту", callback_data=f"send|{order_id}"),
+        [InlineKeyboardButton("📤 Отправить клиенту", callback_data=f"sendmenu|{order_id}"),
          InlineKeyboardButton("🔄 Переделать", callback_data=f"regen|{order_id}")],
         [InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit|{order_id}")],
+    ])
+
+
+def _send_menu_kb(order_id):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🚀 Отправить сейчас", callback_data=f"snd|{order_id}|0")],
+        [InlineKeyboardButton("⏰ Через 1 час", callback_data=f"snd|{order_id}|1"),
+         InlineKeyboardButton("⏰ 2 часа", callback_data=f"snd|{order_id}|2"),
+         InlineKeyboardButton("⏰ 3 часа", callback_data=f"snd|{order_id}|3")],
     ])
 
 
@@ -234,6 +255,44 @@ async def notify_reading_ready(admin_app, order):
     await _send_admin(admin_app,
                       f"🌙 Готов расклад {order.get('order_code','')} ({order.get('customer_name','')}). Проверьте.",
                       _ready_kb(order["id"]))
+
+
+def _consult_caption(c):
+    return (
+        f"📅 *Заявка на консультацию {c.get('order_code','')}*\n\n"
+        f"Клиент: {c.get('name','')} {c.get('surname','') or ''}\n"
+        f"Telegram: @{c.get('username') or '—'} (id {c.get('telegram_id')})\n"
+        f"Телефон: {c.get('phone') or '—'}\n"
+        f"Дата рождения: {c.get('birth_date') or '—'}\n"
+        f"Время рождения: {c.get('birth_time') or '—'}\n"
+        f"Город/страна: {c.get('birth_city') or '—'} / {c.get('birth_country') or '—'}\n"
+        f"Желаемый день: {c.get('desired_day') or '—'}\n"
+        f"Желаемое время: {c.get('desired_time') or '—'}\n"
+        f"Комментарий: {c.get('comment') or '—'}\n"
+        f"Сумма: 49.99 €\n"
+        f"Статус: {db.CONSULT_STATUS_RU.get(c.get('status'), c.get('status'))}")
+
+
+def _consult_kb(cid):
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Принять", callback_data=f"cok|{cid}"),
+        InlineKeyboardButton("❌ Отменить", callback_data=f"cno|{cid}"),
+    ]])
+
+
+async def notify_new_consultation(admin_app, c):
+    chat = db.get_setting("admin_chat_id")
+    if not chat:
+        log.error("admin_chat_id не задан — консультация не отправлена")
+        return
+    await admin_app.bot.send_message(int(chat), _consult_caption(c),
+                                     reply_markup=_consult_kb(c["id"]), parse_mode="Markdown")
+    if c.get("payment_screenshot"):
+        try:
+            await admin_app.bot.send_photo(int(chat), io.BytesIO(_download_client_photo(c["payment_screenshot"])),
+                                           caption="💳 Скриншот оплаты")
+        except Exception:
+            log.warning("не переслать скрин консультации")
 
 
 async def notify_support(admin_app, user, text):
@@ -315,6 +374,86 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if action == "reply":
         ctx.user_data["reply_to"] = arg
         return await q.message.reply_text(f"Напишите сообщение для клиента (id {arg}) — оно уйдёт от имени бота:")
+
+    # ----- консультации -----
+    if action == "clist":
+        st = None if arg == "ALL" else arg
+        rows = db.consultations_list(st, limit=20)
+        if not rows:
+            return await q.message.reply_text("В этой категории пусто.")
+        kb = [[InlineKeyboardButton(f"{c.get('order_code','')} · {c.get('name','')}",
+                                    callback_data=f"copen|{c['id']}")] for c in rows]
+        return await q.message.reply_text("Выберите консультацию:", reply_markup=InlineKeyboardMarkup(kb))
+    if action == "copen":
+        c = db.get_consultation(arg)
+        if not c:
+            return await q.message.reply_text("Заявка не найдена.")
+        await q.message.reply_text(_consult_caption(c), parse_mode="Markdown")
+        if c.get("payment_screenshot"):
+            try:
+                await q.message.reply_photo(io.BytesIO(_download_client_photo(c["payment_screenshot"])),
+                                            caption="💳 Скриншот оплаты")
+            except Exception:
+                pass
+        if c["status"] in ("WAITING_PAYMENT", "PAYMENT_CHECK"):
+            await q.message.reply_text("Действия:", reply_markup=_consult_kb(c["id"]))
+        return
+    if action in ("cok", "cno"):
+        c = db.get_consultation(arg)
+        if not c:
+            return await q.message.reply_text("Заявка не найдена.")
+        if action == "cok":
+            db.set_consultation(arg, {"status": "CONFIRMED"})
+            await q.edit_message_text(q.message.text + "\n\n✅ Принято.")
+            try:
+                await bridge.client_bot.send_message(c["telegram_id"],
+                    "Маргарита получила ваш запрос. Консультация успешно подтверждена. Скоро с вами свяжутся лично. 🌙")
+            except Exception:
+                pass
+        else:
+            db.set_consultation(arg, {"status": "CANCELLED"})
+            await q.edit_message_text(q.message.text + "\n\n❌ Отменено.")
+            try:
+                await bridge.client_bot.send_message(c["telegram_id"],
+                    "К сожалению, возникла проблема с подтверждением оплаты. "
+                    "Маргарита не сможет провести консультацию по этой заявке.")
+            except Exception:
+                pass
+        return
+
+    # ----- отложенная отправка расклада -----
+    if action == "sendmenu":
+        return await q.message.reply_text("Когда отправить расклад клиенту?", reply_markup=_send_menu_kb(arg))
+    if action == "snd":
+        oid, hours = arg.split("|")
+        hours = int(hours)
+        order = db.get_order(oid)
+        if not order or not order.get("result"):
+            return await q.message.reply_text("Текст расклада пуст.")
+        if hours == 0:
+            txt = order["result"]
+            for i in range(0, len(txt), 3800):
+                await bridge.client_bot.send_message(order["telegram_id"], txt[i:i+3800])
+            db.log_message(order["telegram_id"], "bot", "[расклад отправлен]")
+            db.set_order(oid, {"status": "SENT", "sent_at": dt.datetime.utcnow().isoformat()})
+            return await q.message.reply_text("📤 Расклад отправлен клиенту.")
+        # запланировать
+        when = (dt.datetime.utcnow() + dt.timedelta(hours=hours)).isoformat()
+        db.set_order(oid, {"status": "SCHEDULED_SEND", "scheduled_send_at": when})
+        dirs = ", ".join(order.get("directions") or [])
+        amount = order.get("amount")
+        price_line = f"Стоимость заказа: {amount:.2f} €\n" if amount else ""
+        try:
+            await bridge.client_bot.send_message(order["telegram_id"],
+                "Ваш персональный расклад подготовлен и находится в обработке. 🌙\n\n"
+                f"Направления: {dirs}\n"
+                f"{price_line}"
+                f"Номер заказа: {order.get('order_code','')}\n"
+                f"Имя: {order.get('customer_name','')}\n\n"
+                "Скоро вы получите его здесь.")
+        except Exception:
+            pass
+        return await q.message.reply_text(f"⏰ Расклад запланирован к отправке через {hours} ч.")
 
     # действия по заказу
     order = db.get_order(arg)

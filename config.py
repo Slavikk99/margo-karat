@@ -47,3 +47,6 @@ PRICES = {
 
 # --- Опрос воркера ---
 POLL_SEC = int(os.getenv("POLL_SEC", "20"))
+
+# Ссылка на сайт-визитку «Знакомство с Маргаритой» (GitHub Pages)
+BIO_URL = os.getenv("BIO_URL", "https://slavikk99.github.io/margo-karat/margo_bio.html")

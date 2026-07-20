@@ -17,9 +17,18 @@ STATUS_RU = {
     "SENT": "📜 Завершён",
     "COMPLETED": "📜 Завершён",
     "CONSULT_PAID": "✅ Оплачено, согласуем время",
+    "SCHEDULED_SEND": "⏰ Запланирована отправка",
     "REJECTED": "❌ Отклонён",
     "CANCELLED": "❌ Отменён",
     "NEW": "🔮 Оформление",
+}
+
+CONSULT_STATUS_RU = {
+    "WAITING_PAYMENT": "🕐 Ожидает оплату",
+    "PAYMENT_CHECK": "💳 На проверке оплаты",
+    "CONFIRMED": "✅ Подтверждена",
+    "CANCELLED": "❌ Отменена",
+    "COMPLETED": "📜 Проведена",
 }
 
 
@@ -120,6 +129,52 @@ def recent_duplicate(tg_id, package):
 
 def make_order_code(order_no):
     return f"MK-{dt.datetime.utcnow().year}-{int(order_no):06d}"
+
+
+def make_consult_code(order_no):
+    return f"MK-C-{dt.datetime.utcnow().year}-{int(order_no):06d}"
+
+
+# ---------- КОНСУЛЬТАЦИИ (отдельная таблица, не пересекается с заказами) ----------
+def create_consultation(data):
+    return insert("consultations", data)
+
+
+def get_consultation(cid):
+    rows = select("consultations", {"id": f"eq.{cid}", "select": "*"})
+    return rows[0] if rows else None
+
+
+def set_consultation(cid, payload):
+    return update("consultations", {"id": f"eq.{cid}"}, payload)
+
+
+def active_consultation(tg_id):
+    rows = select("consultations", {
+        "telegram_id": f"eq.{tg_id}",
+        "status": "in.(WAITING_PAYMENT,PAYMENT_CHECK)",
+        "select": "*", "order": "created_at.desc", "limit": "1"})
+    return rows[0] if rows else None
+
+
+def consultations_list(status=None, limit=20):
+    params = {"select": "*", "order": "created_at.desc", "limit": str(limit)}
+    if status:
+        params["status"] = f"eq.{status}"
+    return select("consultations", params)
+
+
+def user_consultations(tg_id, limit=10):
+    return select("consultations", {"telegram_id": f"eq.{tg_id}", "select": "*",
+                                    "order": "created_at.desc", "limit": str(limit)})
+
+
+def orders_due_send():
+    """Заказы с запланированной отправкой, которым пора уйти клиенту."""
+    now = dt.datetime.utcnow().isoformat()
+    return select("oracle_orders", {
+        "status": "eq.SCHEDULED_SEND", "scheduled_send_at": f"lte.{now}",
+        "select": "*", "limit": "10"})
 
 
 # ---------- лог переписки (для админ-панели чатов) ----------

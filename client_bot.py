@@ -20,7 +20,7 @@ from telegram.ext import (Application, CommandHandler, CallbackQueryHandler,
 
 import bridge
 import db
-from config import PAYMENT_DETAILS, PRICES
+from config import PAYMENT_DETAILS, PRICES, BIO_URL
 
 log = logging.getLogger("oracle.client")
 
@@ -77,13 +77,16 @@ def _welcome():
 
 
 def _main_inline():
-    return InlineKeyboardMarkup([
+    rows = [
         [InlineKeyboardButton("🔮 Начать расклад", callback_data="menu|new")],
         [InlineKeyboardButton("📦 Мои заказы", callback_data="menu|orders"),
          InlineKeyboardButton("🕐 Статус заказа", callback_data="menu|status")],
         [InlineKeyboardButton("👑 Приватная консультация", callback_data="pkg|Приватная консультация")],
         [InlineKeyboardButton("👤 Связаться с Маргаритой", callback_data="menu|contact")],
-    ])
+    ]
+    if BIO_URL:
+        rows.append([InlineKeyboardButton("🌙 Знакомство с Маргаритой", url=BIO_URL)])
+    return InlineKeyboardMarkup(rows)
 
 
 # ---------------- команды ----------------
@@ -227,25 +230,45 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             pass
         return await q.message.reply_text("Заказ отменён. Вы можете оформить новый в любой момент. 🌙",
                                           reply_markup=MENU_KB)
+    if data.startswith("ccancel|"):
+        cid = data.split("|", 1)[1]
+        db.set_consultation(cid, {"status": "CANCELLED"})
+        try:
+            await q.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return await q.message.reply_text("Заявка на консультацию отменена. Можете оформить новую. 🌙",
+                                          reply_markup=MENU_KB)
     if data == "cancelno":
-        return await q.message.reply_text("Хорошо, заказ остаётся активным. 🙏")
+        return await q.message.reply_text("Хорошо, заявка остаётся активной. 🙏")
     if data.startswith("rate|"):
         return await _on_rate(q, ctx, data)
 
 
 # ---------------- выбор пакета (с проверкой активного заказа) ----------------
 async def _choose_package(q, ctx, pkg):
-    act = db.active_order(q.from_user.id)
-    if act:
-        code = act.get("order_code", "")
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🕐 Подождать", callback_data="cancelno")],
-            [InlineKeyboardButton("❌ Отменить заказ", callback_data=f"cancel|{act['id']}")],
-        ])
-        return await q.message.reply_text(
-            f"У вас уже есть активный заказ *{code}* — «{db.STATUS_RU.get(act['status'], act['status'])}».\n\n"
-            "Можно подождать его завершения или отменить и оформить новый.",
-            reply_markup=kb, parse_mode="Markdown")
+    # антидубль ПО ТИПУ: консультации и обычные заказы не блокируют друг друга
+    if pkg == CONSULT:
+        act = db.active_consultation(q.from_user.id)
+        if act:
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🕐 Подождать", callback_data="cancelno")],
+                [InlineKeyboardButton("❌ Отменить консультацию", callback_data=f"ccancel|{act['id']}")]])
+            return await q.message.reply_text(
+                f"У вас уже есть активная заявка на консультацию *{act.get('order_code','')}* — "
+                f"«{db.CONSULT_STATUS_RU.get(act['status'], act['status'])}».\n\n"
+                "Можно подождать или отменить и оформить заново.", reply_markup=kb, parse_mode="Markdown")
+    else:
+        act = db.active_order(q.from_user.id)
+        if act:
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🕐 Подождать", callback_data="cancelno")],
+                [InlineKeyboardButton("❌ Отменить заказ", callback_data=f"cancel|{act['id']}")]])
+            return await q.message.reply_text(
+                f"У вас уже есть активный заказ *{act.get('order_code','')}* — "
+                f"«{db.STATUS_RU.get(act['status'], act['status'])}».\n\n"
+                "Можно подождать его завершения или отменить и оформить новый.",
+                reply_markup=kb, parse_mode="Markdown")
 
     ctx.user_data.clear()
     ctx.user_data[D] = {"package": pkg, "directions": [], "photos": [], "add_consult": False}
@@ -541,39 +564,62 @@ async def _on_paid(q, ctx):
         return
     ctx.user_data["_creating"] = True
     try:
-        if db.active_order(q.from_user.id):
-            return await q.message.reply_text("У вас уже есть активный заказ в обработке. 🙏")
-        if db.recent_duplicate(q.from_user.id, d["package"]):
-            return await q.message.reply_text("Такой заказ уже создан минуту назад и в обработке. 🙏")
         u = q.from_user
-        total = _order_total(d["package"], d.get("add_consult"))
-        question = d.get("question")
-        if d["package"] == CONSULT:
-            question = (f"Желаемый день: {d.get('consult_day','—')}; "
-                        f"время: {d.get('consult_time','—')}; "
-                        f"комментарий: {d.get('question') or '—'}")
-        try:
-            order = db.create_order({
-                "telegram_id": u.id, "username": u.username or "", "first_name": u.first_name or "",
-                "customer_name": d.get("customer_name"), "customer_surname": d.get("customer_surname"),
-                "phone": d.get("phone"), "birth_date": d.get("birth_date"),
-                "birth_city": d.get("birth_city"), "birth_country": d.get("birth_country"),
-                "birth_time": d.get("birth_time"),
-                "package": d["package"], "directions": d["directions"],
-                "hand_side": d.get("hand_side"), "question": question,
-                "photos": d["photos"], "add_consult": d.get("add_consult", False),
-                "amount": total, "status": "WAITING_PAYMENT",
-            })
-            code = db.make_order_code(order.get("order_no", 0))
-            db.set_order(order["id"], {"order_code": code})
-        except Exception:
-            log.exception("Не удалось создать заказ для %s", u.id)
-            return await q.message.reply_text("Ошибка при создании заказа. Попробуйте ещё раз через минуту.")
+        is_consult = (d["package"] == CONSULT)
+        # антидубль ПО ТИПУ
+        if is_consult:
+            if db.active_consultation(u.id):
+                return await q.message.reply_text("У вас уже есть активная заявка на консультацию. 🙏")
+        else:
+            if db.active_order(u.id):
+                return await q.message.reply_text("У вас уже есть активный заказ в обработке. 🙏")
+            if db.recent_duplicate(u.id, d["package"]):
+                return await q.message.reply_text("Такой заказ уже создан минуту назад и в обработке. 🙏")
+
+        if is_consult:
+            try:
+                c = db.create_consultation({
+                    "telegram_id": u.id, "username": u.username or "", "first_name": u.first_name or "",
+                    "name": d.get("customer_name"), "surname": d.get("customer_surname"),
+                    "phone": d.get("phone"), "birth_date": d.get("birth_date"),
+                    "birth_time": d.get("birth_time"), "birth_city": d.get("birth_city"),
+                    "birth_country": d.get("birth_country"),
+                    "desired_day": d.get("consult_day"), "desired_time": d.get("consult_time"),
+                    "comment": d.get("question"), "amount": 49.99, "status": "WAITING_PAYMENT",
+                })
+                code = db.make_consult_code(c.get("order_no", 0))
+                db.set_consultation(c["id"], {"order_code": code})
+            except Exception:
+                log.exception("Не удалось создать консультацию для %s", u.id)
+                return await q.message.reply_text("Ошибка при создании заявки. Попробуйте ещё раз через минуту.")
+            ctx.user_data["_await_payment_shot"] = c["id"]
+            ctx.user_data["_shot_type"] = "consult"
+        else:
+            total = _order_total(d["package"], d.get("add_consult"))
+            try:
+                order = db.create_order({
+                    "telegram_id": u.id, "username": u.username or "", "first_name": u.first_name or "",
+                    "customer_name": d.get("customer_name"), "customer_surname": d.get("customer_surname"),
+                    "phone": d.get("phone"), "birth_date": d.get("birth_date"),
+                    "birth_city": d.get("birth_city"), "birth_country": d.get("birth_country"),
+                    "birth_time": d.get("birth_time"),
+                    "package": d["package"], "directions": d["directions"],
+                    "hand_side": d.get("hand_side"), "question": d.get("question"),
+                    "photos": d["photos"], "add_consult": d.get("add_consult", False),
+                    "amount": total, "status": "WAITING_PAYMENT",
+                })
+                code = db.make_order_code(order.get("order_no", 0))
+                db.set_order(order["id"], {"order_code": code})
+            except Exception:
+                log.exception("Не удалось создать заказ для %s", u.id)
+                return await q.message.reply_text("Ошибка при создании заказа. Попробуйте ещё раз через минуту.")
+            ctx.user_data["_await_payment_shot"] = order["id"]
+            ctx.user_data["_shot_type"] = "order"
+
         try:
             await q.edit_message_reply_markup(reply_markup=None)
         except Exception:
             pass
-        ctx.user_data["_await_payment_shot"] = order["id"]
         await q.message.reply_text(
             f"Заказ *{code}* создан. 📎\n\n"
             "🚨🚨🚨 *ВНИМАНИЕ* 🚨🚨🚨\n\n"
@@ -586,31 +632,38 @@ async def _on_paid(q, ctx):
 
 
 async def _on_payment_screenshot(update, ctx):
-    order_id = ctx.user_data.get("_await_payment_shot")
-    if not order_id:
+    rec_id = ctx.user_data.get("_await_payment_shot")
+    if not rec_id:
         return
-    order = db.get_order(order_id)
-    if order and order.get("payment_screenshot"):
+    is_consult = ctx.user_data.get("_shot_type") == "consult"
+    getter = db.get_consultation if is_consult else db.get_order
+    setter = db.set_consultation if is_consult else db.set_order
+    rec = getter(rec_id)
+    if rec and rec.get("payment_screenshot"):
         return await update.message.reply_text("Подтверждение уже загружено и ожидает проверки. 🙏")
     fid = update.message.photo[-1].file_id
-    db.set_order(order_id, {"payment_screenshot": fid, "status": "PAYMENT_CHECK"})
+    setter(rec_id, {"payment_screenshot": fid, "status": "PAYMENT_CHECK"})
     ctx.user_data.pop("_await_payment_shot", None)
-    order = db.get_order(order_id)
+    rec = getter(rec_id)
+    tail = ("Как только Маргарита подтвердит оплату, она свяжется с вами для согласования."
+            if is_consult else "Как только Маргарита подтвердит оплату, начнётся создание вашего разбора.")
     await update.message.reply_text(
-        f"Спасибо! 🌙 Скриншот получен, заказ *{order.get('order_code','')}* отправлен на проверку.\n\n"
-        "Как только Маргарита подтвердит оплату, начнётся создание вашего разбора.",
+        f"Спасибо! 🌙 Скриншот получен, заявка *{rec.get('order_code','')}* отправлена на проверку.\n\n{tail}",
         parse_mode="Markdown", reply_markup=MENU_KB)
     ctx.user_data.clear()
-    # уведомляем админа через мост (надёжно, вне persistence)
     try:
         if bridge.admin_app is not None:
-            from admin_bot import notify_new_order
-            await notify_new_order(bridge.admin_app, order)
-            log.info("Заказ %s отправлен админу", order.get("order_code"))
+            if is_consult:
+                from admin_bot import notify_new_consultation
+                await notify_new_consultation(bridge.admin_app, rec)
+            else:
+                from admin_bot import notify_new_order
+                await notify_new_order(bridge.admin_app, rec)
+            log.info("Заявка %s отправлена админу", rec.get("order_code"))
         else:
-            log.error("bridge.admin_app не задан — заказ %s не ушёл админу!", order_id)
+            log.error("bridge.admin_app не задан — заявка %s не ушла админу!", rec_id)
     except Exception:
-        log.exception("Не удалось уведомить админа о заказе %s", order_id)
+        log.exception("Не удалось уведомить админа о заявке %s", rec_id)
 
 
 # ---------------- отзыв ----------------

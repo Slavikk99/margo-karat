@@ -22,6 +22,21 @@ from admin_bot import build_admin_app, notify_new_order, notify_reading_ready
 from ai_agent import generate_reading
 
 
+async def send_scheduled(client_app):
+    """Отправка запланированных раскладов, когда наступило время."""
+    import datetime as dt
+    for o in db.orders_due_send():
+        try:
+            txt = o.get("result") or ""
+            for i in range(0, len(txt), 3800):
+                await client_app.bot.send_message(o["telegram_id"], txt[i:i+3800])
+            db.log_message(o["telegram_id"], "bot", "[расклад отправлен]")
+            db.set_order(o["id"], {"status": "SENT", "sent_at": dt.datetime.utcnow().isoformat()})
+            log.info("⏰ Запланированный расклад отправлен: %s", o.get("order_code"))
+        except Exception:
+            log.exception("Ошибка отложенной отправки %s", o.get("id"))
+
+
 async def send_review_requests(client_app):
     """Через 1 час после отправки — просим оценку и предлагаем консультацию."""
     for o in db.orders_due_review():
@@ -69,6 +84,7 @@ async def ai_worker(client_app, admin_app):
                 except Exception:
                     log.exception("Ошибка генерации заказа %s", oid)
                     db.set_order(oid, {"status": "APPROVED"})  # вернём в очередь
+            await send_scheduled(client_app)
             await send_review_requests(client_app)
         except Exception:
             log.exception("Ошибка цикла воркера")
