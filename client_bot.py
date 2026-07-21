@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Клиентский бот Margo Karat — кнопочный интерфейс уровня приложения."""
 import io
+import re
 import logging
+import datetime as _dt
 
 try:
     import qrcode
@@ -62,7 +64,7 @@ def _order_total(pkg, add_consult):
 
 def _welcome():
     return (
-        "✨ *Добро пожаловать в Margo Karat!*\n\n"
+        "✨ *Добро пожаловать к Margo Karat!*\n\n"
         "Меня зовут Маргарита. Более двадцати лет я помогаю людям находить ответы — "
         "мягко, честно и по делу. Здесь вы получите персональный разбор именно вашей ситуации.\n\n"
         "*Направления:*\n"
@@ -110,13 +112,27 @@ async def cmd_history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ---------------- приветственные действия ----------------
 async def _open_services(message, ctx):
     ctx.user_data.clear()
+    await message.reply_text(
+        "🔮 *Направления гадания*\n\n"
+        "🔮 *Таро* — расклад показывает текущую ситуацию, скрытые влияния и наиболее благоприятный путь развития событий.\n\n"
+        "✡️ *Каббала* — анализ духовных задач, сильных сторон личности и жизненного предназначения.\n\n"
+        "🌙 *Натальная карта* — разбор характера, жизненных циклов, талантов и ключевых событий по дате рождения.\n\n"
+        "☕ *Кофейная гуща* — символический анализ знаков и образов, появившихся в вашей чашке после кофе.\n\n"
+        "✋ *Линии руки* — изучение характера, жизненного пути и потенциала по ладони.\n\n"
+        "💬 *Личный вопрос* — подробный ответ на конкретную ситуацию, которая вас беспокоит.",
+        parse_mode="Markdown")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"🔮 Один вопрос — {PRICES['1 вопрос']}", callback_data="pkg|1 вопрос")],
-        [InlineKeyboardButton(f"✨ Три направления — {PRICES['3 направления']}", callback_data="pkg|3 направления")],
-        [InlineKeyboardButton(f"🌙 Полный пакет (5) — {PRICES['Полный пакет']}", callback_data="pkg|Полный пакет")],
-        [InlineKeyboardButton(f"👑 Приватная консультация — {PRICES[CONSULT]}", callback_data="pkg|Приватная консультация")],
+        [InlineKeyboardButton(f"1️⃣ Один способ гадания — {PRICES['1 вопрос']}", callback_data="pkg|1 вопрос")],
+        [InlineKeyboardButton(f"3️⃣ Три направления — {PRICES['3 направления']}", callback_data="pkg|3 направления")],
+        [InlineKeyboardButton(f"🌙 Полный пакет (все 5) — {PRICES['Полный пакет']}", callback_data="pkg|Полный пакет")],
+        [InlineKeyboardButton(f"👑 Личная консультация — {PRICES[CONSULT]}", callback_data="pkg|Приватная консультация")],
     ])
-    await message.reply_text("Выберите услугу:", reply_markup=kb)
+    await message.reply_text(
+        "💫 *Пакеты услуг*\n\n"
+        f"1️⃣ *Один способ гадания* — любое одно направление из пяти. {PRICES['1 вопрос']}\n\n"
+        f"3️⃣ *Три направления* — любые три направления. {PRICES['3 направления']}\n\n"
+        f"🌙 *Полный пакет* — все пять направлений сразу. {PRICES['Полный пакет']}\n\n"
+        "Выберите вариант ниже 👇", reply_markup=kb, parse_mode="Markdown")
 
 
 async def _send_history(message, tg_id):
@@ -275,10 +291,12 @@ async def _choose_package(q, ctx, pkg):
 
     if pkg == CONSULT:
         await q.message.reply_text(
-            "👑 *Приватная консультация Маргариты* — 49.99 €\n\n"
-            "Полная персональная работа один на один: анализ прошлого, настоящего и будущего, "
-            "ответы на личные вопросы, рекомендации, возможность заказа личного амулета, "
-            "живое общение. После оплаты согласуем удобные дату и время.",
+            "👑 *Личная консультация — 49.99 €*\n\n"
+            "Личная консультация проводится индивидуально. Во время неё разбираются:\n\n"
+            "• прошлое;\n• настоящее;\n• будущее;\n• отношения;\n• финансы;\n"
+            "• предназначение;\n• жизненные препятствия;\n• ваши личные вопросы.\n\n"
+            "После оплаты вы согласуете удобные дату и время проведения консультации лично с Маргаритой.\n\n"
+            "Оставьте, пожалуйста, данные 👇",
             parse_mode="Markdown")
         return await _start_collect(q.message, ctx)
 
@@ -376,6 +394,58 @@ def _field_kb(key):
     return InlineKeyboardMarkup(rows)
 
 
+def _parse_date(v):
+    v = v.strip()
+    for sep in (".", "/", "-", " "):
+        parts = v.split(sep)
+        if len(parts) == 3:
+            try:
+                d, m, y = (int(x) for x in parts)
+                if y < 100:
+                    y += 1900
+                return _dt.date(y, m, d)
+            except Exception:
+                continue
+    return None
+
+
+def _validate(key, value):
+    """Возвращает (ok, результат/ошибка). '__under18__' — отдельный сигнал."""
+    v = (value or "").strip()
+    if key in ("customer_name", "customer_surname", "birth_city", "birth_country"):
+        if not (2 <= len(v) <= 40):
+            return False, "Введите корректное значение (2–40 символов)."
+        if any(ch.isdigit() for ch in v):
+            return False, "Здесь не должно быть цифр — проверьте, пожалуйста."
+        return True, v
+    if key == "phone":
+        digits = re.sub(r"\D", "", v)
+        if not (7 <= len(digits) <= 15):
+            return False, "Введите корректный номер телефона с кодом страны (например +49…)."
+        return True, v
+    if key == "birth_date":
+        d = _parse_date(v)
+        if not d:
+            return False, "Дата в формате ДД.ММ.ГГГГ, например 14.03.1990."
+        today = _dt.date.today()
+        if d > today:
+            return False, "Дата рождения не может быть в будущем."
+        age = (today - d).days // 365
+        if age > 120:
+            return False, "Проверьте, пожалуйста, дату рождения."
+        if age < 18:
+            return False, "__under18__"
+        return True, d.strftime("%d.%m.%Y")
+    if key == "birth_time":
+        if v.lower() in ("не знаю", "незнаю", "не знаю время рождения", "-", "—"):
+            return True, "не знаю"
+        m = re.match(r"^(\d{1,2})[:.\s](\d{2})$", v)
+        if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+            return False, "Время в формате ЧЧ:ММ, например 14:30 (или нажмите «не знаю»)."
+        return True, f"{int(m.group(1)):02d}:{m.group(2)}"
+    return True, v
+
+
 async def _ask_field(message, ctx):
     step = ctx.user_data[STEP]
     fields = ctx.user_data["_fields"]
@@ -386,7 +456,17 @@ async def _ask_field(message, ctx):
 async def _advance(message, ctx, value):
     step = ctx.user_data.get(STEP, 0)
     fields = ctx.user_data["_fields"]
-    ctx.user_data[D][fields[step][0]] = value
+    key = fields[step][0]
+    ok, res = _validate(key, value)
+    if not ok:
+        if res == "__under18__":
+            ctx.user_data.clear()
+            return await message.reply_text(
+                "Для получения раскладов и консультаций необходимо быть старше 18 лет. 🙏",
+                reply_markup=MENU_KB)
+        await message.reply_text("⚠️ " + res)
+        return await _ask_field(message, ctx)
+    ctx.user_data[D][key] = res
     step += 1
     ctx.user_data[STEP] = step
     if step < len(fields):
@@ -498,10 +578,24 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await _on_payment_screenshot(update, ctx)
     if D not in ctx.user_data:
         return
-    kind = ctx.user_data.pop("_await_photo", None)
+    kind = ctx.user_data.get("_await_photo")
     if not kind:
         return
-    ctx.user_data[D]["photos"].append({"file_id": update.message.photo[-1].file_id, "kind": kind})
+    fid = update.message.photo[-1].file_id
+    # AI-проверка: на фото действительно ладонь / кофейная гуща?
+    try:
+        from ai_agent import check_image
+        await update.message.reply_text("Проверяю фотографию… ⏳")
+        ok = check_image(fid, kind)
+    except Exception:
+        ok = True
+    if not ok:
+        need = "фотографию вашей ладони ✋" if kind == "palm" else "фото кофейной чашки с гущей ☕"
+        return await update.message.reply_text(
+            f"Кажется, на фото не {('ладонь' if kind=='palm' else 'кофейная гуща')}. "
+            f"Пожалуйста, пришлите чёткую {need}")
+    ctx.user_data.pop("_await_photo", None)
+    ctx.user_data[D]["photos"].append({"file_id": fid, "kind": kind})
     await update.message.reply_text("Фотография принята. 🙏")
     await _after_data(update.message, ctx)
 

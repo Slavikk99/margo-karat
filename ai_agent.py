@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """AI Oracle Agent — генерация раскладов (800+ слов на направление) + анализ фото."""
+import re
 import base64
 import logging
 import random
@@ -25,6 +26,32 @@ def _download_telegram_file(file_id):
     f = requests.get(f"https://api.telegram.org/file/bot{CLIENT_BOT_TOKEN}/{path}", timeout=60)
     f.raise_for_status()
     return f.content
+
+
+def check_image(file_id, kind):
+    """Проверяет, что на фото то, что нужно. kind: 'palm' | 'coffee'.
+    Возвращает True, если подходит ИЛИ проверка недоступна (fail-open)."""
+    if not _groq:
+        return True
+    q = ("Это фотография человеческой ладони (руки)? Ответь одним словом: да или нет."
+         if kind == "palm"
+         else "Это фотография кофейной чашки с кофейной гущей внутри? Ответь одним словом: да или нет.")
+    try:
+        img = _download_telegram_file(file_id)
+        b64 = base64.b64encode(img).decode()
+        resp = _groq.chat.completions.create(
+            model=GROQ_VISION_MODEL,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": q},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+            ]}],
+            temperature=0, max_tokens=10, timeout=60,
+        )
+        ans = (resp.choices[0].message.content or "").strip().lower()
+        return "да" in ans or "yes" in ans
+    except Exception as e:
+        log.warning("check_image недоступен (%s) — пропускаю проверку", e)
+        return True
 
 
 def analyze_image(file_id, what):
@@ -69,32 +96,47 @@ def _generate_direction(order, direction, image_note=""):
     if direction in ("Таро", "Задать вопрос"):
         ctx += f"\nВыпавшие карты (кратко назови три и сразу переходи к анализу): {cards}\n"
 
-    resp = _groq.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": f"{STYLE}\n\n{KNOWLEDGE[direction]}"},
-            {"role": "user", "content": ctx +
-             "\nНапиши персональный разбор ~800 слов. Минимум теории о картах — максимум пользы, "
-             "анализа ситуации и конкретных рекомендаций, что делать дальше."},
-        ],
-        temperature=0.9, max_tokens=4096, timeout=300,
-    )
-    text = (resp.choices[0].message.content or "").strip()
+    sys = f"{STYLE}\n\n{KNOWLEDGE[direction]}"
+    user = (ctx + "\nНапиши персональный разбор минимум 600 слов по обязательной структуре из 9 частей. "
+            "Минимум теории о картах — максимум пользы, анализа судьбы и конкретных выводов. "
+            "Только по-русски, без английских слов, иероглифов и случайных символов.")
 
-    # контроль качества: если коротко — дорасширяем
-    if len(text.split()) < 550:
-        resp2 = _groq.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": f"{STYLE}\n\n{KNOWLEDGE[direction]}"},
-                {"role": "user", "content": ctx},
-                {"role": "assistant", "content": text},
-                {"role": "user", "content": "Углуби и расширь разбор до 800-1000 слов, сохранив живой стиль."},
-            ],
-            temperature=0.9, max_tokens=4096, timeout=300,
-        )
-        text = (resp2.choices[0].message.content or text).strip()
+    def _gen(extra_msgs=None, temp=0.9):
+        msgs = [{"role": "system", "content": sys}, {"role": "user", "content": user}]
+        if extra_msgs:
+            msgs += extra_msgs
+        r = _groq.chat.completions.create(model=GROQ_MODEL, messages=msgs,
+                                          temperature=temp, max_tokens=4096, timeout=300)
+        return (r.choices[0].message.content or "").strip()
+
+    text = _gen()
+    # контроль качества: короткий / иероглифы / много латиницы / мусор → перегенерация
+    for _ in range(2):
+        if not _quality_bad(text):
+            break
+        if len(text.split()) < 600:
+            text = _gen([{"role": "assistant", "content": text},
+                         {"role": "user", "content": "Расширь и углуби разбор до 600-900 слов, сохранив стиль и структуру."}])
+        else:
+            text = _gen(temp=0.85)
     return text
+
+
+_CJK = re.compile(r"[぀-ヿ一-鿿가-힯]")
+_LATIN_WORD = re.compile(r"\b[A-Za-z]{4,}\b")
+
+
+def _quality_bad(text):
+    """True, если текст плохой: слишком короткий, иероглифы, много английских слов, мусор."""
+    if len(text.split()) < 500:
+        return True
+    if _CJK.search(text):
+        return True
+    if len(_LATIN_WORD.findall(text)) > 8:   # допускаем немного (имена карт и т.п.)
+        return True
+    if re.search(r"[�]{1,}", text):
+        return True
+    return False
 
 
 # ---------- полный расклад по заказу ----------
