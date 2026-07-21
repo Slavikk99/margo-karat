@@ -33,9 +33,11 @@ def check_image(file_id, kind):
     Возвращает True, если подходит ИЛИ проверка недоступна (fail-open)."""
     if not _groq:
         return True
-    q = ("Это фотография человеческой ладони (руки)? Ответь одним словом: да или нет."
-         if kind == "palm"
-         else "Это фотография кофейной чашки с кофейной гущей внутри? Ответь одним словом: да или нет.")
+    q = ("Внимательно посмотри на фото. На нём крупным планом человеческая ладонь с видимыми линиями руки? "
+         "Ответь строго одним словом: ДА или НЕТ."
+         if kind == "palm" else
+         "Внимательно посмотри на фото. На нём кофейная чашка с кофейной гущей (следами кофе) внутри? "
+         "Ответь строго одним словом: ДА или НЕТ.")
     try:
         img = _download_telegram_file(file_id)
         b64 = base64.b64encode(img).decode()
@@ -45,10 +47,14 @@ def check_image(file_id, kind):
                 {"type": "text", "text": q},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
             ]}],
-            temperature=0, max_tokens=10, timeout=60,
+            temperature=0, max_tokens=200, timeout=60,
         )
         ans = (resp.choices[0].message.content or "").strip().lower()
-        return "да" in ans or "yes" in ans
+        log.info("check_image[%s] ответ модели: %r", kind, ans[:80])
+        # явное «нет» — отклоняем; иначе принимаем (fail-open при неясности/сбое)
+        if re.search(r"\bнет\b", ans) or re.search(r"\bno\b", ans):
+            return False
+        return True
     except Exception as e:
         log.warning("check_image недоступен (%s) — пропускаю проверку", e)
         return True

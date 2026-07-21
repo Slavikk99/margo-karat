@@ -21,7 +21,15 @@ SERVICE_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "")
 # --- AI (Groq по умолчанию: бесплатно, длинные тексты + vision) ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+# Vision-модель (анализ фото ладони/гущи). llama-4-scout/maverick удалены Groq 17.06.2026 —
+# если в .env остался старый вариант, принудительно используем актуальную qwen3.6-27b.
+_DEPRECATED_VISION = {
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+}
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.6-27b").strip()
+if GROQ_VISION_MODEL in _DEPRECATED_VISION or not GROQ_VISION_MODEL:
+    GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
 
 # --- Реквизиты оплаты (ручная оплата) ---
 PAYMENT_DETAILS = os.getenv("PAYMENT_DETAILS_OVERRIDE", (
