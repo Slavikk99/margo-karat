@@ -119,11 +119,14 @@ def active_order(tg_id):
 
 
 def recent_duplicate(tg_id, package):
-    """Есть ли такой же заказ за последние 30 минут."""
+    """Есть ли АКТИВНЫЙ такой же заказ за последние 30 минут.
+    Отменённые/отклонённые/завершённые не считаются — можно оформлять заново."""
     since = (dt.datetime.utcnow() - dt.timedelta(minutes=30)).isoformat()
     rows = select("oracle_orders", {
         "telegram_id": f"eq.{tg_id}", "package": f"eq.{package}",
-        "created_at": f"gte.{since}", "select": "id", "limit": "1"})
+        "created_at": f"gte.{since}",
+        "status": "in.(WAITING_PAYMENT,PAYMENT_CHECK)",
+        "select": "id", "limit": "1"})
     return bool(rows)
 
 
