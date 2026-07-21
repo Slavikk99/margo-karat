@@ -22,6 +22,26 @@ from admin_bot import build_admin_app, notify_new_order, notify_reading_ready
 from ai_agent import generate_reading
 
 
+async def retry_admin_delivery(admin_app):
+    """Гарантированная доставка: повторяем отправку заказов/консультаций админу,
+    пока admin_notified не станет true."""
+    from admin_bot import notify_new_order, notify_new_consultation
+    for o in db.orders_need_admin():
+        try:
+            await notify_new_order(admin_app, o)
+            db.set_order(o["id"], {"admin_notified": True})
+            log.info("↻ Повторно доставлен заказ админу: %s", o.get("order_code"))
+        except Exception:
+            log.exception("Повтор доставки заказа %s не удался", o.get("id"))
+    for c in db.consults_need_admin():
+        try:
+            await notify_new_consultation(admin_app, c)
+            db.set_consultation(c["id"], {"admin_notified": True})
+            log.info("↻ Повторно доставлена консультация админу: %s", c.get("order_code"))
+        except Exception:
+            log.exception("Повтор доставки консультации %s не удался", c.get("id"))
+
+
 async def send_scheduled(client_app):
     """Отправка запланированных раскладов, когда наступило время."""
     import datetime as dt
@@ -84,6 +104,7 @@ async def ai_worker(client_app, admin_app):
                 except Exception:
                     log.exception("Ошибка генерации заказа %s", oid)
                     db.set_order(oid, {"status": "APPROVED"})  # вернём в очередь
+            await retry_admin_delivery(admin_app)
             await send_scheduled(client_app)
             await send_review_requests(client_app)
         except Exception:

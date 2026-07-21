@@ -177,6 +177,19 @@ def orders_due_send():
         "select": "*", "limit": "10"})
 
 
+def orders_need_admin():
+    """Оплаченные (со скрином) заказы, о которых админ ещё не уведомлён — автоповтор."""
+    return select("oracle_orders", {
+        "status": "eq.PAYMENT_CHECK", "admin_notified": "eq.false",
+        "select": "*", "order": "created_at.asc", "limit": "10"})
+
+
+def consults_need_admin():
+    return select("consultations", {
+        "status": "eq.PAYMENT_CHECK", "admin_notified": "eq.false",
+        "select": "*", "order": "created_at.asc", "limit": "10"})
+
+
 # ---------- лог переписки (для админ-панели чатов) ----------
 def log_message(tg_id, role, text):
     try:

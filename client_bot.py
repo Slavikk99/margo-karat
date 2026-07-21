@@ -377,7 +377,6 @@ BASE_FIELDS = [
 ]
 NATAL_FIELDS = [
     ("birth_city", "Город рождения?"),
-    ("birth_country", "Страна рождения?"),
     ("birth_time", "Точное время рождения? (например, 14:30)"),
 ]
 QUESTION_FIELD = ("question", "Дополните свой вопрос или задайте свой вопрос.")
@@ -390,7 +389,6 @@ CONSULT_FIELDS = [
     ("birth_date", "Дата рождения? (например, 14.03.1990)"),
     ("birth_time", "Точное время рождения? (например, 14:30)"),
     ("birth_city", "Город рождения?"),
-    ("birth_country", "Страна рождения?"),
     ("consult_day", "📅 В какой день вам было бы удобно провести консультацию?"),
     ("consult_time", "🕒 В какое время вам было бы удобно?"),
     ("question", "Дополнительный комментарий (необязательно)."),
@@ -405,6 +403,21 @@ def _field_kb(key):
         rows.append([InlineKeyboardButton("➡️ Продолжить без вопроса", callback_data="skip|question")])
     rows.append([InlineKeyboardButton("❌ Отменить", callback_data="cancel_new")])
     return InlineKeyboardMarkup(rows)
+
+
+def _city_exists(name):
+    """Проверка существования города через OpenStreetMap Nominatim.
+    True если найден ИЛИ проверка недоступна (fail-open, чтобы не блокировать реальных людей)."""
+    import requests
+    try:
+        r = requests.get("https://nominatim.openstreetmap.org/search",
+                         params={"q": name, "format": "json", "limit": 1, "addressdetails": 0},
+                         headers={"User-Agent": "MargoKaratBot/1.0"}, timeout=10)
+        if r.ok:
+            return len(r.json()) > 0
+    except Exception:
+        pass
+    return True
 
 
 def _parse_date(v):
@@ -425,7 +438,7 @@ def _parse_date(v):
 def _validate(key, value):
     """Возвращает (ok, результат/ошибка). '__under18__' — отдельный сигнал."""
     v = (value or "").strip()
-    if key in ("customer_name", "customer_surname", "birth_city", "birth_country"):
+    if key in ("customer_name", "customer_surname", "birth_city"):
         if not (2 <= len(v) <= 40):
             return False, "⚠️ Введите корректное значение (2–40 символов)."
         if any(ch.isdigit() for ch in v):
@@ -440,9 +453,8 @@ def _validate(key, value):
         d = _parse_date(v)
         today = _dt.date.today()
         if not d or d > today or (today - d).days // 365 > 120:
-            return False, ("⚠️ Дата рождения введена неправильно.\n\n"
-                           "Пожалуйста, проверьте данные и введите настоящую дату.\n\n"
-                           "Пример правильного формата:\n01.08.2007")
+            return False, ("⚠️ Дата рождения указана неверно.\n\n"
+                           "Пример правильного ввода:\n01.08.2007")
         if (today - d).days // 365 < 18:
             return False, "__under18__"
         return True, d.strftime("%d.%m.%Y")
@@ -451,8 +463,7 @@ def _validate(key, value):
             return True, "не знаю"
         m = re.match(r"^(\d{1,2})[:.\s](\d{2})$", v)
         if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
-            return False, ("⚠️ Время рождения указано неправильно.\n\n"
-                           "Введите реальное время рождения.\n\nПример:\n14:30")
+            return False, ("⚠️ Время рождения указано неверно.\n\nПример:\n14:35")
         return True, f"{int(m.group(1)):02d}:{m.group(2)}"
     return True, v
 
@@ -473,10 +484,20 @@ async def _advance(message, ctx, value):
         if res == "__under18__":
             ctx.user_data.clear()
             return await message.reply_text(
-                "Для получения раскладов и консультаций необходимо быть старше 18 лет. 🙏",
-                reply_markup=MENU_KB)
+                "Сервис доступен только для лиц старше 18 лет.", reply_markup=MENU_KB)
         await message.reply_text(res)
         return await _ask_field(message, ctx)
+    # проверка существования города (геокодинг, fail-open)
+    if key == "birth_city":
+        import asyncio
+        try:
+            exists = await asyncio.to_thread(_city_exists, res)
+        except Exception:
+            exists = True
+        if not exists:
+            await message.reply_text(
+                "⚠️ Указанный город не найден.\n\nПожалуйста, укажите существующий город рождения.")
+            return await _ask_field(message, ctx)
     ctx.user_data[D][key] = res
     step += 1
     ctx.user_data[STEP] = step
@@ -601,10 +622,13 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception:
         ok = True
     if not ok:
-        need = "фотографию вашей ладони ✋" if kind == "palm" else "фото кофейной чашки с гущей ☕"
-        return await update.message.reply_text(
-            f"Кажется, на фото не {('ладонь' if kind=='palm' else 'кофейная гуща')}. "
-            f"Пожалуйста, пришлите чёткую {need}")
+        msg = ("На фотографии не обнаружена ладонь.\n\n"
+               "Пожалуйста, сделайте новую фотографию руки так, чтобы были хорошо видны линии ладони."
+               if kind == "palm" else
+               "На фотографии не обнаружена кофейная гуща.\n\n"
+               "Пожалуйста, загрузите фотографию чашки с кофейной гущей.\n\n"
+               "Для получения качественного расклада фотография должна содержать именно кофейную гущу.")
+        return await update.message.reply_text(msg)
     ctx.user_data.pop("_await_photo", None)
     ctx.user_data[D]["photos"].append({"file_id": fid, "kind": kind})
     await update.message.reply_text("Фотография принята. 🙏")
@@ -682,7 +706,6 @@ async def _on_paid(q, ctx):
                     "name": d.get("customer_name"), "surname": d.get("customer_surname"),
                     "phone": d.get("phone"), "birth_date": d.get("birth_date"),
                     "birth_time": d.get("birth_time"), "birth_city": d.get("birth_city"),
-                    "birth_country": d.get("birth_country"),
                     "desired_day": d.get("consult_day"), "desired_time": d.get("consult_time"),
                     "comment": d.get("question"), "amount": 49.99, "status": "WAITING_PAYMENT",
                 })
@@ -758,11 +781,13 @@ async def _on_payment_screenshot(update, ctx):
             else:
                 from admin_bot import notify_new_order
                 await notify_new_order(bridge.admin_app, rec)
+            setter(rec_id, {"admin_notified": True})   # доставлено
             log.info("Заявка %s отправлена админу", rec.get("order_code"))
         else:
-            log.error("bridge.admin_app не задан — заявка %s не ушла админу!", rec_id)
+            log.error("bridge.admin_app не задан — заявка %s не ушла (воркер повторит)", rec_id)
     except Exception:
-        log.exception("Не удалось уведомить админа о заявке %s", rec_id)
+        # НЕ помечаем admin_notified — воркер повторит доставку автоматически
+        log.exception("Не удалось уведомить админа о заявке %s (будет автоповтор)", rec_id)
 
 
 # ---------------- отзыв ----------------
