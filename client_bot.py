@@ -65,15 +65,18 @@ def _order_total(pkg, add_consult):
 def _welcome():
     return (
         "✨ *Добро пожаловать к Margo Karat!*\n\n"
-        "Меня зовут Маргарита. Более двадцати лет я помогаю людям находить ответы — "
-        "мягко, честно и по делу. Здесь вы получите персональный разбор именно вашей ситуации.\n\n"
-        "*Направления:*\n"
-        "🔮 Таро — что происходит и как поступить\n"
-        "✡️ Каббала — ваша духовная задача и сильные стороны\n"
-        "🌙 Натальная карта — характер, судьба, важные периоды\n"
-        "☕ Кофейная гуща — символы вашей чашки и будущее\n"
-        "✋ Линии руки — характер и путь по ладони\n"
-        "💬 Личный вопрос — прямой ответ на то, что волнует\n\n"
+        "Меня зовут Маргарита.\n\n"
+        "Более двадцати лет я помогаю людям находить ответы — мягко, внимательно и индивидуально.\n\n"
+        "Здесь вы можете получить персональный разбор вашей ситуации и выбрать направление, "
+        "которое ближе именно вам.\n\n"
+        "*Направления:*\n\n"
+        "🔮 *Таро* — помогает разобраться в текущей ситуации, возможностях и дальнейших шагах.\n\n"
+        "✡️ *Каббала* — раскрывает духовные задачи, сильные стороны и скрытый потенциал человека.\n\n"
+        "🌙 *Натальная карта* — анализ характера, жизненного пути и важных периодов через дату, "
+        "время и место рождения.\n\n"
+        "☕ *Кофейная гуща* — символический анализ образов и знаков вашей чашки.\n\n"
+        "✋ *Линии руки* — анализ характера, особенностей личности и жизненного пути по ладони.\n\n"
+        "💬 *Личный вопрос* — возможность получить разбор конкретной ситуации, которая вас волнует.\n\n"
         "Нажмите кнопку ниже, чтобы начать 👇"
     )
 
@@ -125,7 +128,6 @@ async def _open_services(message, ctx):
         [InlineKeyboardButton(f"1️⃣ Один способ гадания — {PRICES['1 вопрос']}", callback_data="pkg|1 вопрос")],
         [InlineKeyboardButton(f"3️⃣ Три направления — {PRICES['3 направления']}", callback_data="pkg|3 направления")],
         [InlineKeyboardButton(f"🌙 Полный пакет (все 5) — {PRICES['Полный пакет']}", callback_data="pkg|Полный пакет")],
-        [InlineKeyboardButton(f"👑 Личная консультация — {PRICES[CONSULT]}", callback_data="pkg|Приватная консультация")],
     ])
     await message.reply_text(
         "💫 *Пакеты услуг*\n\n"
@@ -133,6 +135,17 @@ async def _open_services(message, ctx):
         f"3️⃣ *Три направления* — любые три направления. {PRICES['3 направления']}\n\n"
         f"🌙 *Полный пакет* — все пять направлений сразу. {PRICES['Полный пакет']}\n\n"
         "Выберите вариант ниже 👇", reply_markup=kb, parse_mode="Markdown")
+    # личная консультация — ОТДЕЛЬНЫЙ блок, не среди направлений гадания
+    ckb = InlineKeyboardMarkup([[InlineKeyboardButton(
+        f"🌙 Оформить личную консультацию — {PRICES[CONSULT]}", callback_data="pkg|Приватная консультация")]])
+    await message.reply_text(
+        "🌙 *Личная консультация с Маргаритой*\n\n"
+        "Это индивидуальная беседа, где можно подробно разобрать вашу ситуацию, прошлое, "
+        "настоящее и возможные направления будущего. Маргарита лично работает с вашим запросом "
+        "и помогает глубже разобраться в важных вопросах.\n\n"
+        f"Стоимость: *{PRICES[CONSULT]}*\n"
+        "После оформления заявки согласовывается удобное время проведения консультации.",
+        reply_markup=ckb, parse_mode="Markdown")
 
 
 async def _send_history(message, tg_id):
@@ -414,26 +427,23 @@ def _validate(key, value):
     v = (value or "").strip()
     if key in ("customer_name", "customer_surname", "birth_city", "birth_country"):
         if not (2 <= len(v) <= 40):
-            return False, "Введите корректное значение (2–40 символов)."
+            return False, "⚠️ Введите корректное значение (2–40 символов)."
         if any(ch.isdigit() for ch in v):
-            return False, "Здесь не должно быть цифр — проверьте, пожалуйста."
+            return False, "⚠️ Здесь не должно быть цифр — проверьте, пожалуйста."
         return True, v
     if key == "phone":
         digits = re.sub(r"\D", "", v)
         if not (7 <= len(digits) <= 15):
-            return False, "Введите корректный номер телефона с кодом страны (например +49…)."
+            return False, "⚠️ Введите корректный номер телефона с кодом страны.\n\nПример: +49 170 1234567"
         return True, v
     if key == "birth_date":
         d = _parse_date(v)
-        if not d:
-            return False, "Дата в формате ДД.ММ.ГГГГ, например 14.03.1990."
         today = _dt.date.today()
-        if d > today:
-            return False, "Дата рождения не может быть в будущем."
-        age = (today - d).days // 365
-        if age > 120:
-            return False, "Проверьте, пожалуйста, дату рождения."
-        if age < 18:
+        if not d or d > today or (today - d).days // 365 > 120:
+            return False, ("⚠️ Дата рождения введена неправильно.\n\n"
+                           "Пожалуйста, проверьте данные и введите настоящую дату.\n\n"
+                           "Пример правильного формата:\n01.08.2007")
+        if (today - d).days // 365 < 18:
             return False, "__under18__"
         return True, d.strftime("%d.%m.%Y")
     if key == "birth_time":
@@ -441,7 +451,8 @@ def _validate(key, value):
             return True, "не знаю"
         m = re.match(r"^(\d{1,2})[:.\s](\d{2})$", v)
         if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
-            return False, "Время в формате ЧЧ:ММ, например 14:30 (или нажмите «не знаю»)."
+            return False, ("⚠️ Время рождения указано неправильно.\n\n"
+                           "Введите реальное время рождения.\n\nПример:\n14:30")
         return True, f"{int(m.group(1)):02d}:{m.group(2)}"
     return True, v
 
@@ -464,7 +475,7 @@ async def _advance(message, ctx, value):
             return await message.reply_text(
                 "Для получения раскладов и консультаций необходимо быть старше 18 лет. 🙏",
                 reply_markup=MENU_KB)
-        await message.reply_text("⚠️ " + res)
+        await message.reply_text(res)
         return await _ask_field(message, ctx)
     ctx.user_data[D][key] = res
     step += 1
@@ -629,15 +640,9 @@ async def _show_payment(message, ctx):
     total = _order_total(d["package"], d.get("add_consult"))
     dirs = ", ".join(d["directions"]) if d["directions"] else d["package"]
     extra = " + приватная консультация" if d.get("add_consult") else ""
-    if qrcode:
-        try:
-            await message.reply_photo(_qr_photo(CARD_MONO), caption="QR — карта Monobank")
-            await message.reply_photo(_qr_photo(USDT_TRON), caption="QR — USDT (TRON)")
-        except Exception:
-            pass
     await message.reply_text(
         f"Ваш заказ: *{d['package']}{extra}*\nНаправления: {dirs}\nК оплате: *{total:.2f} €*\n\n"
-        f"{PAYMENT_DETAILS}\n\nСкопируйте реквизиты кнопкой или отсканируйте QR выше.",
+        f"{PAYMENT_DETAILS}\n\nСкопируйте реквизиты кнопкой ниже.",
         reply_markup=_pay_markup(), parse_mode="Markdown")
 
 
